@@ -9,7 +9,7 @@ using System.Windows.Forms;
 
 namespace PingTray
 {
-    /// <summary>The tray icon. Pings the hosts on a timer and shows the result as its color and tooltip.</summary>
+    /// <summary>The tray icon. Checks the hosts on a timer and shows the result as its color and tooltip.</summary>
     class TrayApp : ApplicationContext
     {
         readonly SynchronizationContext ui;
@@ -71,7 +71,7 @@ namespace PingTray
         }
 
         /// <summary>
-        /// Pings all hosts at once and shows the results. While a check runs, a timer tick is
+        /// Checks all hosts at once and shows the results. While a check runs, a timer tick is
         /// dropped; other requests (queue = true) run another check after it.
         /// </summary>
         async void Check(bool queue)
@@ -89,7 +89,7 @@ namespace PingTray
                     checkAgain = false;
                     Settings used = settings;
                     HostResult[] results = await Task.WhenAll(used.Hosts.Select(host =>
-                        Task.Run(() => Pinger.CheckAsync(host, used.TimeoutMs))));
+                        Task.Run(() => Pinger.CheckAsync(host, used))));
                     if (exiting)
                         return;
                     if (used == settings)
@@ -107,7 +107,7 @@ namespace PingTray
         void Show(HostResult[] results)
         {
             tray.Icon = icons[(int)StatusReport.Overall(results)];
-            SetTooltip(StatusReport.Tooltip(results));
+            SetTooltip(StatusReport.Tooltip(results, settings));
         }
 
         /// <summary>

@@ -7,15 +7,25 @@ using System.Text;
 
 namespace PingTray
 {
-    /// <summary>What to ping and how often. Stored as key=value lines in %APPDATA%\PingTray\settings.ini.</summary>
+    /// <summary>How a host is checked: an ICMP echo, or a TCP connection for networks that block ping.</summary>
+    public enum CheckMethod
+    {
+        Ping,
+        Tcp
+    }
+
+    /// <summary>What to check and how often. Stored as key=value lines in %APPDATA%\PingTray\settings.ini.</summary>
     public class Settings
     {
         public const int MinIntervalSeconds = 1, MaxIntervalSeconds = 3600;
         public const int MinTimeoutMs = 100, MaxTimeoutMs = 10000;
+        public const int MinPort = 1, MaxPort = 65535;
 
         public List<string> Hosts = new List<string> { "ya.ru", "google.com", "1.1.1.1" };
         public int IntervalSeconds = 10;
         public int TimeoutMs = 2000;
+        public CheckMethod Method = CheckMethod.Ping;
+        public int TcpPort = 443;  // used when Method is Tcp
 
         public static string FilePath
         {
@@ -70,6 +80,14 @@ namespace PingTray
                         if (isNumber)
                             settings.TimeoutMs = Clamp(number, MinTimeoutMs, MaxTimeoutMs);
                         break;
+                    case "method":
+                        if (value.Equals("tcp", StringComparison.OrdinalIgnoreCase))
+                            settings.Method = CheckMethod.Tcp;
+                        break;
+                    case "tcp_port":
+                        if (isNumber)
+                            settings.TcpPort = Clamp(number, MinPort, MaxPort);
+                        break;
                 }
             }
             return settings;
@@ -82,6 +100,9 @@ namespace PingTray
             text.AppendLine("# or edit this file and restart Ping Tray.");
             text.AppendLine("interval_seconds=" + IntervalSeconds.ToString(CultureInfo.InvariantCulture));
             text.AppendLine("timeout_ms=" + TimeoutMs.ToString(CultureInfo.InvariantCulture));
+            text.AppendLine("# method: ping, or tcp to connect to tcp_port instead (for networks that block ping)");
+            text.AppendLine("method=" + (Method == CheckMethod.Tcp ? "tcp" : "ping"));
+            text.AppendLine("tcp_port=" + TcpPort.ToString(CultureInfo.InvariantCulture));
             foreach (string host in Hosts)
                 text.AppendLine("host=" + host);
             return text.ToString();

@@ -3,12 +3,15 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Sockets;
 
 namespace PingTray.Tests
 {
     /// <summary>
     /// Checks what works without a screen: host names, the settings file, the status and tooltip,
-    /// the icons, and pings to this computer. scripts/build.ps1 runs it before building the app.
+    /// the icons, and pings and TCP connections to this computer. scripts/build.ps1 runs it
+    /// before building the app.
     /// </summary>
     static class TestMain
     {
@@ -46,17 +49,33 @@ namespace PingTray.Tests
 
         static void SettingsTests()
         {
-            var settings = new Settings { Hosts = new List<string> { "ya.ru", "8.8.8.8" }, IntervalSeconds = 30, TimeoutMs = 1500 };
+            var settings = new Settings
+            {
+                Hosts = new List<string> { "ya.ru", "8.8.8.8" },
+                IntervalSeconds = 30,
+                TimeoutMs = 1500,
+                Method = CheckMethod.Tcp,
+                TcpPort = 8443,
+            };
             Settings back = Settings.Parse(settings.Format());
             Equal("ya.ru 8.8.8.8", string.Join(" ", back.Hosts), "hosts survive saving");
             Equal(30, back.IntervalSeconds, "interval survives saving");
             Equal(1500, back.TimeoutMs, "timeout survives saving");
+            Equal(CheckMethod.Tcp, back.Method, "method survives saving");
+            Equal(8443, back.TcpPort, "port survives saving");
+            Equal(CheckMethod.Ping, Settings.Parse(new Settings().Format()).Method, "ping survives saving");
+            Equal(CheckMethod.Ping, new Settings().Method, "ping is the default");
+            Equal(443, new Settings().TcpPort, "443 is the default port");
+            Settings odd = Settings.Parse("method=TCP\ntcp_port=70000\n");
+            Equal(CheckMethod.Tcp, odd.Method, "method ignores case");
+            Equal(Settings.MaxPort, odd.TcpPort, "port is clamped");
+            Equal(CheckMethod.Ping, Settings.Parse("method=carrier pigeon\n").Method, "an unknown method means ping");
 
-            Settings odd = Settings.Parse("interval_seconds=0\r\ntimeout_ms=99999\r\nhost=YA.ru\r\nhost=ya.ru\r\n" +
+            Settings messy = Settings.Parse("interval_seconds=0\r\ntimeout_ms=99999\r\nhost=YA.ru\r\nhost=ya.ru\r\n" +
                 "nonsense\r\n# host=commented.out\r\nhost = https://google.com/ \r\n");
-            Equal(Settings.MinIntervalSeconds, odd.IntervalSeconds, "interval is clamped");
-            Equal(Settings.MaxTimeoutMs, odd.TimeoutMs, "timeout is clamped");
-            Equal("ya.ru google.com", string.Join(" ", odd.Hosts), "hosts are normalized, deduplicated, comments skipped");
+            Equal(Settings.MinIntervalSeconds, messy.IntervalSeconds, "interval is clamped");
+            Equal(Settings.MaxTimeoutMs, messy.TimeoutMs, "timeout is clamped");
+            Equal("ya.ru google.com", string.Join(" ", messy.Hosts), "hosts are normalized, deduplicated, comments skipped");
 
             Settings bad = Settings.Parse("interval_seconds=abc\n");
             Equal(0, bad.Hosts.Count, "a file without hosts means no hosts");
@@ -74,21 +93,25 @@ namespace PingTray.Tests
 
         static void TooltipTests()
         {
+            var ping = new Settings();
+            var tcp = new Settings { Method = CheckMethod.Tcp, TcpPort = 443 };
             Equal("Online\nya.ru: 12 ms\n1.1.1.1: <1 ms",
-                StatusReport.Tooltip(Results(Up("ya.ru", 12), Up("1.1.1.1", 0))), "all up");
+                StatusReport.Tooltip(Results(Up("ya.ru", 12), Up("1.1.1.1", 0)), ping), "all up");
             Equal("1 of 2 hosts answer\nya.ru: 12 ms\ngoogle.com: timeout",
-                StatusReport.Tooltip(Results(Up("ya.ru", 12), Down("google.com", "timeout"))), "some down");
+                StatusReport.Tooltip(Results(Up("ya.ru", 12), Down("google.com", "timeout")), ping), "some down");
             Equal("Offline: no host answers\nya.ru: DNS error",
-                StatusReport.Tooltip(Results(Down("ya.ru", "DNS error"))), "all down");
+                StatusReport.Tooltip(Results(Down("ya.ru", "DNS error")), ping), "all down");
+            Equal("Online (TCP 443)\nya.ru: 12 ms",
+                StatusReport.Tooltip(Results(Up("ya.ru", 12)), tcp), "TCP names the port");
 
             List<HostResult> many = Enumerable.Range(1, 20).Select(i => Up("host" + i + ".example.com", 100)).ToList();
-            string tip = StatusReport.Tooltip(many);
+            string tip = StatusReport.Tooltip(many, tcp);
             string[] lines = tip.Split('\n');
             Equal(true, tip.Length <= StatusReport.MaxTooltipLength, "a long list fits: " + tip.Length);
             Equal("+" + (20 - (lines.Length - 2)) + " more", lines.Last(), "says how many hosts are left out");
 
             string longName = new string('x', 200) + ".com";
-            Equal(true, StatusReport.Tooltip(Results(Up(longName, 1))).Length <= StatusReport.MaxTooltipLength,
+            Equal(true, StatusReport.Tooltip(Results(Up(longName, 1)), tcp).Length <= StatusReport.MaxTooltipLength,
                 "a very long name fits");
         }
 
@@ -114,12 +137,30 @@ namespace PingTray.Tests
 
         static void PingerTests()
         {
-            HostResult loopback = Pinger.CheckAsync("127.0.0.1", 1000).Result;
+            var ping = new Settings { TimeoutMs = 1000 };
+            HostResult loopback = Pinger.CheckAsync("127.0.0.1", ping).Result;
             Equal(true, loopback.Ok, "127.0.0.1 answers (" + loopback.Error + ")");
-            HostResult localhost = Pinger.CheckAsync("localhost", 1000).Result;
+            HostResult localhost = Pinger.CheckAsync("localhost", ping).Result;
             Equal(true, localhost.Ok, "localhost answers (" + localhost.Error + ")");
-            HostResult missing = Pinger.CheckAsync("no-such-host.invalid", 2000).Result;
+            HostResult missing = Pinger.CheckAsync("no-such-host.invalid", new Settings()).Result;
             Equal(true, !missing.Ok && missing.Error.StartsWith("DNS"), "an unknown name is a DNS failure (" + missing.Error + ")");
+
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            var tcp = new Settings { Method = CheckMethod.Tcp, TcpPort = port, TimeoutMs = 1000 };
+            HostResult open = Pinger.CheckAsync("localhost", tcp).Result;
+            Equal(true, open.Ok, "an open TCP port answers (" + open.Error + ")");
+            listener.Stop();
+            // Windows retries a refused connection and reports it after about 2 seconds.
+            tcp.TimeoutMs = 5000;
+            HostResult closed = Pinger.CheckAsync("127.0.0.1", tcp).Result;
+            Equal("refused", closed.Error, "a closed TCP port is refused");
+            // 192.0.2.1 is a documentation address: nothing there answers.
+            var silent = new Settings { Method = CheckMethod.Tcp, TcpPort = 443, TimeoutMs = 300 };
+            HostResult nobody = Pinger.CheckAsync("192.0.2.1", silent).Result;
+            Equal(true, !nobody.Ok && (nobody.Error == "timeout" || nobody.Error == "unreachable"),
+                "a silent TCP host times out (" + nobody.Error + ")");
         }
 
         static HostResult Up(string host, long ms)

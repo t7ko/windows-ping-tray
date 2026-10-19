@@ -5,13 +5,14 @@ using System.Windows.Forms;
 
 namespace PingTray
 {
-    /// <summary>Edits the hosts, the interval, the timeout and "Start with Windows".</summary>
+    /// <summary>Edits the hosts, the interval, the timeout, the check method and "Start with Windows".</summary>
     class SettingsForm : Form
     {
         public event Action<Settings> Saved;
 
         readonly TextBox hostsBox;
-        readonly NumericUpDown intervalBox, timeoutBox;
+        readonly NumericUpDown intervalBox, timeoutBox, portBox;
+        readonly RadioButton tcpButton;
         readonly CheckBox autostartBox;
         readonly bool autostartWas;
 
@@ -38,6 +39,35 @@ namespace PingTray
             };
             intervalBox = Number(Settings.MinIntervalSeconds, Settings.MaxIntervalSeconds, 1, settings.IntervalSeconds, em);
             timeoutBox = Number(Settings.MinTimeoutMs, Settings.MaxTimeoutMs, 100, settings.TimeoutMs, em);
+
+            // Radio buttons are exclusive within their parent, so both go into one panel.
+            var pingButton = new RadioButton
+            {
+                Text = "Ping (ICMP echo)",
+                AutoSize = true,
+                Checked = settings.Method == CheckMethod.Ping,
+            };
+            tcpButton = new RadioButton
+            {
+                Text = "Connect to TCP port",
+                AutoSize = true,
+                Checked = settings.Method == CheckMethod.Tcp,
+                Anchor = AnchorStyles.Left,
+            };
+            portBox = Number(Settings.MinPort, Settings.MaxPort, 1, settings.TcpPort, em);
+            portBox.Enabled = tcpButton.Checked;
+            tcpButton.CheckedChanged += delegate { portBox.Enabled = tcpButton.Checked; };
+            var methodPanel = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, Margin = new Padding(0) };
+            AddWide(methodPanel, pingButton);
+            AddRow(methodPanel, tcpButton, portBox);
+            var hint = new Label
+            {
+                Text = "TCP is for networks that block ping. Web servers accept port 443 (HTTPS).",
+                AutoSize = true,
+                MaximumSize = new Size(hostsBox.Width, 0),
+                ForeColor = SystemColors.GrayText,
+            };
+
             autostartWas = Autostart.IsEnabled;
             autostartBox = new CheckBox
             {
@@ -68,10 +98,15 @@ namespace PingTray
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 Location = new Point(em, em),
             };
-            AddWide(layout, Caption("Hosts to ping, one per line (names or IP addresses):"));
+            AddWide(layout, Caption("Hosts to check, one per line (names or IP addresses):"));
             AddWide(layout, hostsBox);
-            AddRow(layout, Caption("Ping every"), intervalBox, Caption("seconds"));
+            AddRow(layout, Caption("Check every"), intervalBox, Caption("seconds"));
             AddRow(layout, Caption("Timeout"), timeoutBox, Caption("ms (per host)"));
+            Label checkBy = Caption("Check each host by:");
+            checkBy.Margin = new Padding(3, em / 2, 3, 0);
+            AddWide(layout, checkBy);
+            AddWide(layout, methodPanel);
+            AddWide(layout, hint);
             AddWide(layout, autostartBox);
             AddWide(layout, buttons);
             Controls.Add(layout);
@@ -106,6 +141,8 @@ namespace PingTray
                 Hosts = hosts,
                 IntervalSeconds = (int)intervalBox.Value,
                 TimeoutMs = (int)timeoutBox.Value,
+                Method = tcpButton.Checked ? CheckMethod.Tcp : CheckMethod.Ping,
+                TcpPort = (int)portBox.Value,
             };
             try
             {

@@ -1,0 +1,5 @@
+dist/
+obj/
+.claude/settings.local.json
+AGENTS.local.md
+CLAUDE.local.md

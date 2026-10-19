@@ -17,7 +17,8 @@ namespace PingTray
         readonly CheckBox autostartBox;
         readonly bool autostartWas;
 
-        public SettingsForm(Settings settings)
+        /// <param name="reportProblem">Opens a problem report (it needs the tray's tooltip).</param>
+        public SettingsForm(Settings settings, Action reportProblem)
         {
             Text = "Ping Tray " + Updater.Text(Updater.CurrentVersion) + " settings";
             Font = SystemFonts.MessageBoxFont;
@@ -122,6 +123,11 @@ namespace PingTray
             layout.SetColumnSpan(updatesBox, 2);
             updatesLabel.Margin = updatesBox.Margin = new Padding(3, em / 2, 3, 3);
             AddWide(layout, autostartBox);
+            string homePage = Links.HomePage.Replace("https://", "");
+            LinkLabel homeLink = Link("Home page: " + homePage, homePage, Links.OpenHomePage);
+            homeLink.Margin = new Padding(3, em, 3, 0);
+            AddWide(layout, homeLink);
+            AddWide(layout, Link("Found a problem? Write to " + Links.BugAddress, Links.BugAddress, reportProblem));
             AddWide(layout, buttons);
             Controls.Add(layout);
 
@@ -174,6 +180,15 @@ namespace PingTray
             if (Saved != null)
                 Saved(settings);
             Close();
+        }
+
+        /// <summary>A label whose last words, linkText, are a link.</summary>
+        static LinkLabel Link(string text, string linkText, Action open)
+        {
+            var link = new LinkLabel { Text = text, AutoSize = true, Anchor = AnchorStyles.Left };
+            link.LinkArea = new LinkArea(text.Length - linkText.Length, linkText.Length);
+            link.LinkClicked += delegate { open(); };
+            return link;
         }
 
         static Label Caption(string text)

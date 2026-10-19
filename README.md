@@ -44,12 +44,14 @@ tray icons.
 
 - Hover over the icon: the ping time of each host.
 - Double-click it: Settings.
-- Right-click it: Check connection now, Settings, Check for updates, Exit.
+- Right-click it: Check connection now, Settings, Check for updates, Home page (this
+  page), Report a problem, Exit.
 
 Settings has the hosts to check, one per line (host names or IP addresses; a pasted URL
 such as `https://ya.ru/` is cut down to its host), how often to check them (1 to 3600
-seconds), how long to wait for each answer (100 to 10000 ms), how to check them (ping,
-or a TCP connection to a port), what to do with updates, and Start with Windows.
+seconds; once a minute by default), how long to wait for each answer (100 to 10000 ms),
+how to check them (ping, or a TCP connection to a port), what to do with updates, and
+Start with Windows.
 
 ![The Settings window](docs/settings.png)
 
@@ -91,6 +93,14 @@ release of this repository. What it does with a newer one depends on Settings > 
 Before installing, Ping Tray checks that the download has the size and SHA-256 that
 GitHub lists for the release and that it is Ping Tray of the announced version. If
 anything fails, the running version stays and a notification says why.
+
+## Reporting problems
+
+Right-click the icon and choose Report a problem, or click the address at the bottom of
+Settings. That opens a new mail to <ivan.t7ko@gmail.com> in your mail app, with the
+version, the Windows version, the settings and the current tooltip already in it. Add
+what happened and what you expected, and send it. Without a mail app, write to that
+address directly and mention the version: it is in the title of the Settings window.
 
 ## Building
 

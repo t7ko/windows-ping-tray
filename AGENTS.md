@@ -20,6 +20,8 @@ in `../AGENTS.md`, outside this repository, as are machine details: the git-igno
 - `src/SettingsForm.cs`: the settings window, built in code (there is no designer).
 - `src/Autostart.cs`: the `HKCU\...\Run` value behind Start with Windows.
 - `src/Updater.cs`: GitHub's latest-release API, download, checks, and swapping the exe.
+- `src/Links.cs`: the home page, and Report a problem: a `mailto:` to the user's personal
+  address with the version, settings and tooltip filled in.
 - `src/StatusIcons.cs`: draws the icons as .ico data. `scripts/build.ps1` loads this file
   with `Add-Type` to write the exe's icon, so it must compile on its own.
 - `tests/Tests.cs`: a console test runner with no framework. `scripts/build.ps1` builds

@@ -30,7 +30,7 @@ namespace PingTray
         public const int MinPort = 1, MaxPort = 65535;
 
         public List<string> Hosts = new List<string> { "ya.ru", "google.com", "1.1.1.1" };
-        public int IntervalSeconds = 10;
+        public int IntervalSeconds = 60;  // network changes trigger a check sooner
         public int TimeoutMs = 2000;
         public CheckMethod Method = CheckMethod.Ping;
         public int TcpPort = 443;  // used when Method is Tcp

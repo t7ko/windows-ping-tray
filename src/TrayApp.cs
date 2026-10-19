@@ -25,6 +25,7 @@ namespace PingTray
         Release update;  // a newer release, found but not installed yet
         DateTime lastUpdateCheck = DateTime.MinValue;  // UTC
         bool checkingUpdate, installing;
+        string tooltip = "";  // as shown, for problem reports
 
         /// <param name="updated">Whether an update has just started this instance.</param>
         public TrayApp(bool updated)
@@ -42,6 +43,9 @@ namespace PingTray
             menu.Items.Add("Check connection now", null, delegate { Check(true); });
             menu.Items.Add(settingsItem);
             menu.Items.Add(updateItem);
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add("Home page", null, delegate { Links.OpenHomePage(); });
+            menu.Items.Add("Report a problem…", null, delegate { ReportProblem(); });
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Exit", null, delegate { ExitThread(); });
 
@@ -145,6 +149,7 @@ namespace PingTray
         {
             if (text.Length > StatusReport.MaxTooltipLength)
                 text = text.Substring(0, StatusReport.MaxTooltipLength);
+            tooltip = text;
             const BindingFlags hidden = BindingFlags.NonPublic | BindingFlags.Instance;
             FieldInfo textField = typeof(NotifyIcon).GetField("text", hidden);
             FieldInfo addedField = typeof(NotifyIcon).GetField("added", hidden);
@@ -163,12 +168,17 @@ namespace PingTray
         {
             if (settingsForm == null)
             {
-                settingsForm = new SettingsForm(settings);
+                settingsForm = new SettingsForm(settings, ReportProblem);
                 settingsForm.Saved += ApplySettings;
                 settingsForm.FormClosed += delegate { settingsForm = null; };
                 settingsForm.Show();
             }
             settingsForm.Activate();
+        }
+
+        void ReportProblem()
+        {
+            Links.ReportProblem(settings, tooltip);
         }
 
         void ApplySettings(Settings saved)

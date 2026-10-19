@@ -27,6 +27,7 @@ namespace PingTray.Tests
             IconTests();
             PingerTests();
             UpdaterTests(args[0]);
+            LinksTests();
             Console.WriteLine(failures == 0 ? "All tests passed." : failures + " test(s) failed.");
             return failures == 0 ? 0 : 1;
         }
@@ -93,6 +94,20 @@ namespace PingTray.Tests
 
             Equal(SecurityProtocolType.SystemDefault, ServicePointManager.SecurityProtocol,
                 "HTTPS uses the TLS versions of Windows (the TargetFramework attribute works)");
+        }
+
+        static void LinksTests()
+        {
+            Equal("https://github.com/t7ko/windows-ping-tray", Links.HomePage, "the home page");
+            string url = Links.BugReportUrl(new Settings(), "Online\n× a: timeout");
+            Equal(true, url.StartsWith("mailto:ivan.t7ko@gmail.com?subject="), "a mail to the author");
+            Equal(false, url.Contains(" ") || url.Contains("\n"), "nothing is left unescaped");
+            string body = Uri.UnescapeDataString(url.Substring(url.IndexOf("&body=", StringComparison.Ordinal) + 6));
+            Equal(true, body.Contains("Ping Tray " + Updater.Text(Updater.CurrentVersion) + " on Windows build "),
+                "the versions of Ping Tray and Windows: " + body.Split('\r')[3]);
+            Equal(true, body.Contains("Checks: ping every 60 s, timeout 2000 ms; updates: auto"), "the settings");
+            Equal(true, body.Contains("Hosts: ya.ru, google.com, 1.1.1.1"), "the hosts");
+            Equal(true, body.Contains("Tooltip:\r\nOnline\r\n× a: timeout"), "the tooltip, with Windows line ends");
         }
 
         static string Sha256(string path)
@@ -167,6 +182,7 @@ namespace PingTray.Tests
             Settings bad = Settings.Parse("interval_seconds=abc\n");
             Equal(0, bad.Hosts.Count, "a file without hosts means no hosts");
             Equal(new Settings().IntervalSeconds, bad.IntervalSeconds, "a bad number keeps the default");
+            Equal(60, new Settings().IntervalSeconds, "a check a minute by default");
             Equal("ya.ru google.com 1.1.1.1", string.Join(" ", new Settings().Hosts), "default hosts");
         }
 

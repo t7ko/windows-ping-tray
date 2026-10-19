@@ -76,17 +76,26 @@ exe's current path; after moving the exe, turn it on again.
 Right-click the icon and choose Journal to see when the connection changed, newest first:
 
 ```text
-2026-10-19 20:43:15  Online again after 2 min 12 s
-2026-10-19 20:41:33  Offline: no host answers
+2026-10-19 09:02:11  Ping Tray 1.2.1 started
 2026-10-19 20:41:03  Not answering: 1.1.1.1 (timeout)
-2026-10-19 09:02:11  Ping Tray 1.2.0 started
+2026-10-19 20:41:33  Offline: no host answers
+2026-10-19 20:43:15  Online again after 2 min 12 s
+2026-10-19 20:57:00  Windows went to sleep
+2026-10-19 21:58:11  Windows woke up after 1 h 1 min
 ```
 
 An entry is written when hosts stop answering, when the set of failing hosts changes, and
-when all answer again, with how long that took since the first one failed. Ping Tray's
-start and Windows going to sleep are noted too; both end a downtime, so a night asleep
-does not count as one. The latest 500 entries are kept in
-`%APPDATA%\PingTray\journal.txt`; Open file in the Journal window opens it.
+when all answer again, with how long that took since the first one failed. The window
+lists the oldest first and opens at the newest, at the bottom.
+
+Ping Tray's start, and Windows going to sleep and waking up, are noted too; both end a
+downtime, so a night asleep does not count as one, and checks while Windows sleeps are
+left out. This includes Modern Standby, which most current laptops use when the lid
+closes: Ping Tray reads it from the Windows event log. A wake counts once Windows has
+stayed awake for 10 seconds, since standby wakes for moments now and then.
+
+The latest 500 entries are kept in `%APPDATA%\PingTray\journal.txt`; Open file in the
+Journal window opens it.
 
 ### Networks that block ping
 

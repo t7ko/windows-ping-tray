@@ -6,7 +6,10 @@ using System.Windows.Forms;
 
 namespace PingTray
 {
-    /// <summary>The journal, newest entry first; entries added while it is open appear at the top.</summary>
+    /// <summary>
+    /// The journal, oldest entry first. It opens scrolled to the end, and entries added while it
+    /// is open appear there.
+    /// </summary>
     class JournalForm : Form
     {
         readonly Journal journal;
@@ -30,7 +33,7 @@ namespace PingTray
                 ScrollBars = ScrollBars.Both,
                 BackColor = SystemColors.Window,
                 Dock = DockStyle.Fill,
-                Text = string.Join("\r\n", Enumerable.Reverse(journal.Entries())),
+                Text = string.Join("\r\n", journal.Entries()),
             };
             var openFile = new Button { Text = "Open file", AutoSize = true, MinimumSize = new Size(5 * em, 0) };
             openFile.Click += delegate { OpenFile(); };
@@ -49,18 +52,22 @@ namespace PingTray
             Padding = new Padding(em);
             Controls.Add(entriesBox);
             Controls.Add(buttons);
-            ClientSize = new Size(34 * em, 20 * em);
+            ClientSize = new Size(44 * em, 20 * em);
             CancelButton = close;
 
             journal.Added += OnAdded;
             FormClosed += delegate { journal.Added -= OnAdded; };
-            // The read-only box starts with all of its text selected otherwise.
-            Shown += delegate { entriesBox.Select(0, 0); };
+            // Without this the read-only box starts at the top with all of its text selected.
+            Shown += delegate
+            {
+                entriesBox.Select(entriesBox.TextLength, 0);
+                entriesBox.ScrollToCaret();
+            };
         }
 
         void OnAdded(string line)
         {
-            entriesBox.Text = entriesBox.TextLength == 0 ? line : line + "\r\n" + entriesBox.Text;
+            entriesBox.AppendText(entriesBox.TextLength == 0 ? line : "\r\n" + line);  // scrolls to it
         }
 
         void OpenFile()

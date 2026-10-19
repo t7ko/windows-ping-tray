@@ -9,17 +9,25 @@ namespace PingTray
 {
     /// <summary>
     /// A short record of state changes: when hosts stop answering, and when all answer again
-    /// with how long it took. Also when Ping Tray starts and when Windows goes to sleep, which
+    /// with how long it took. Also when Ping Tray starts and when Windows sleeps and wakes, which
     /// explain gaps. Kept in journal.txt beside the settings, the latest MaxEntries lines.
     /// </summary>
     public class Journal
     {
         public const int MaxEntries = 500;
+        /// <summary>
+        /// Modern Standby wakes for moments (maintenance, closing the lid flips it a few times):
+        /// a wake counts once Windows has stayed awake this long.
+        /// </summary>
+        public const int WakeSettleSeconds = 10;
         const string TimeFormat = "yyyy-MM-dd HH:mm:ss";
 
         readonly string path;
         HashSet<string> failing;  // hosts that failed the last check; null before the first one
         DateTime downSince;       // when the hosts stopped all answering, while failing is not empty
+        bool asleep;              // since asleepSince; checks are not recorded meanwhile
+        DateTime asleepSince;
+        DateTime? wokeAt;         // a wake that may still turn out to be a moment's
 
         /// <summary>A new entry, as its line in the file.</summary>
         public event Action<string> Added;
@@ -42,20 +50,55 @@ namespace PingTray
         public void Started(string version, DateTime now)
         {
             failing = null;
+            asleep = false;
+            wokeAt = null;
             Add(now, "Ping Tray " + version + " started");
         }
 
-        /// <summary>Sleep ends what is going on: a night asleep is no downtime.</summary>
-        public void Sleeping(DateTime now)
+        /// <summary>
+        /// Windows went to sleep or into Modern Standby at that time. Sleep ends what is going on:
+        /// a night asleep is no downtime. Repeats, and a sleep right after a moment's wake, add nothing.
+        /// </summary>
+        public void Sleeping(DateTime time)
         {
-            failing = null;
-            Add(now, "Windows went to sleep");
+            Settle(time);
+            if (wokeAt != null)
+                wokeAt = null;  // the wake was a moment's: the same sleep goes on
+            else if (!asleep)
+            {
+                asleep = true;
+                asleepSince = time;
+                failing = null;
+                Add(time, "Windows went to sleep");
+            }
         }
 
-        /// <summary>Records what a check found if the failing hosts differ from the check before.</summary>
+        /// <summary>Windows woke up at that time; it counts once Windows stays awake (Settle).</summary>
+        public void WokeUp(DateTime time)
+        {
+            if (asleep && wokeAt == null)
+                wokeAt = time;
+        }
+
+        /// <summary>Writes the wake once Windows has stayed awake for WakeSettleSeconds after it.</summary>
+        public void Settle(DateTime now)
+        {
+            if (wokeAt == null || now - wokeAt.Value < TimeSpan.FromSeconds(WakeSettleSeconds))
+                return;
+            Add(wokeAt.Value, "Windows woke up after " + Duration(wokeAt.Value - asleepSince));
+            asleep = false;
+            wokeAt = null;
+            failing = null;
+        }
+
+        /// <summary>
+        /// Records what a check found if the failing hosts differ from the check before. Checks
+        /// while Windows sleeps (Modern Standby runs some, with the network off) are left out.
+        /// </summary>
         public void Record(IList<HostResult> results, DateTime now)
         {
-            if (results.Count == 0)
+            Settle(now);
+            if (asleep || results.Count == 0)
                 return;
             List<HostResult> failed = results.Where(r => !r.Ok).ToList();
             var hosts = new HashSet<string>(failed.Select(r => r.Host));

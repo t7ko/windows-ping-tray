@@ -21,6 +21,7 @@ in `../AGENTS.md`, outside this repository, as are machine details: the git-igno
 - `src/Autostart.cs`: the `HKCU\...\Run` value behind Start with Windows.
 - `src/Updater.cs`: GitHub's latest-release API, download, checks, and swapping the exe.
 - `src/Journal.cs`: the journal of state changes and its file; `src/JournalForm.cs` shows it.
+- `src/SleepWatcher.cs`: when Windows sleeps and wakes, including Modern Standby.
 - `src/Links.cs`: the home page, and Report a problem: a `mailto:` to the user's personal
   address with the version, settings and tooltip filled in.
 - `src/StatusIcons.cs`: draws the icons as .ico data. `scripts/build.ps1` loads this file
@@ -50,8 +51,16 @@ in `../AGENTS.md`, outside this repository, as are machine details: the git-igno
   first click arrives as a click.
 - The journal follows the set of failing hosts, not each host: an entry when it changes,
   "Online again after <time>" when it empties, timed from when it stopped being empty.
-  Start and sleep (`SystemEvents.PowerModeChanged`) reset it, so no downtime spans them.
-  Each entry rewrites `journal.txt` (500 lines at most), which is small enough.
+  Start and sleep reset it, so no downtime spans them, and checks while asleep are not
+  recorded. Each entry rewrites `journal.txt` (500 lines at most), which is small enough.
+- Sleep: laptops with Modern Standby (S0 low power idle; `powercfg /a` tells) never send
+  `PowerModeChanged`: Windows pauses programs instead, and lets them run for moments during
+  standby, when the network is off. `SleepWatcher` therefore follows Kernel-Power events
+  506 (entering) and 507 (leaving Modern Standby) in the System log with an
+  `EventLogWatcher`, which works without elevation, and uses each event's own time, as
+  events can arrive late. `PowerModeChanged` still covers classic sleep and hibernation.
+  Standby flips in and out several times on closing the lid and for maintenance wakes, so
+  a wake counts only after `Journal.WakeSettleSeconds` (10) without a new 506.
 - One ping (or TCP connection) per host per check. A single lost packet shows yellow
   until the next check.
 - The TCP method is one setting for all hosts, not a `host:port` per line; `HostNames`
@@ -98,6 +107,10 @@ in `../AGENTS.md`, outside this repository, as are machine details: the git-igno
   app, and read the tooltip as `../AGENTS.md` describes. Delete the file afterwards if the
   user had none.
 - `CenterScreen` puts the settings window on the monitor with the mouse pointer.
+- Sleep cannot be tried without putting the user's laptop to sleep. What happened instead
+  can be read: `Get-WinEvent -FilterHashtable @{LogName='System';
+  ProviderName='Microsoft-Windows-Kernel-Power'}` (506/507, also 172 for the network in
+  standby). `tests/Tests.cs` replays such a night.
 - A host that goes down and up on demand: a `TcpListener` on 127.0.0.1 and the TCP method
   with its port. Stop the listener, wait two checks, start it on the same port again.
 - While the user's copy runs, a test copy needs its own single-instance mutex name and

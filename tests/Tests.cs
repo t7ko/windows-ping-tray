@@ -119,28 +119,59 @@ namespace PingTray.Tests
             journal.Record(Results(Down("a", "timeout"), Down("b", "timeout")), start.AddSeconds(181));
             journal.Record(Results(Up("a", 10), Up("b", 20)), start.AddSeconds(313));
             journal.Record(Results(Up("a", 11), Up("b", 21)), start.AddSeconds(373));
+            journal.Record(Results(Up("a", 10), Down("b", "timeout")), start.AddMinutes(50));
             journal.Sleeping(start.AddHours(1));
-            journal.Record(Results(Down("a", "timeout"), Up("b", 5)), start.AddHours(9));
-            journal.Started("1.2.0", start.AddHours(9).AddMinutes(1));
-            journal.Record(Results(Up("a", 1), Up("b", 1)), start.AddHours(9).AddMinutes(2));
-            journal.Record(Results(), start.AddHours(9).AddMinutes(3));
+            journal.Sleeping(start.AddHours(1).AddSeconds(5));
+            journal.Record(Results(Down("a", "timeout"), Down("b", "timeout")), start.AddHours(2));
+            DateTime wake = start.AddHours(9);
+            journal.WokeUp(wake);
+            journal.Record(Results(Down("a", "timeout"), Up("b", 5)), wake.AddSeconds(5));
+            journal.Record(Results(Down("a", "timeout"), Up("b", 5)), wake.AddSeconds(20));
+            journal.Started("1.2.0", wake.AddMinutes(1));
+            journal.Record(Results(Up("a", 1), Up("b", 1)), wake.AddMinutes(2));
+            journal.Record(Results(), wake.AddMinutes(3));
             string[] expected =
             {
                 "2026-10-19 20:00:00  Ping Tray 1.2.0 started",
                 "2026-10-19 20:01:01  Not answering: b (timeout)",
                 "2026-10-19 20:03:01  Offline: no host answers",
                 "2026-10-19 20:05:13  Online again after 4 min 12 s",
+                "2026-10-19 20:50:00  Not answering: b (timeout)",
                 "2026-10-19 21:00:00  Windows went to sleep",
-                "2026-10-20 05:00:00  Not answering: a (timeout)",
+                "2026-10-20 05:00:00  Windows woke up after 8 h 0 min",
+                "2026-10-20 05:00:20  Not answering: a (timeout)",
                 "2026-10-20 05:01:00  Ping Tray 1.2.0 started",
             };
             // Same failing hosts with another reason, all up twice, and no hosts at all add nothing;
-            // the downtime runs from the first failure; sleep and a restart end it without "again".
+            // the downtime runs from the first failure. Sleep ends it without "again"; checks while
+            // asleep, and in the first seconds after waking, are left out. A restart ends it too.
             Equal(string.Join("\n", expected), string.Join("\n", journal.Entries()), "journal entries");
             Equal(expected.Length, heard.Count, "the window hears of every entry");
 
+            // Tonight on the user's laptop (Kernel-Power events 506 and 507): the lid closed at
+            // 20:57 with Modern Standby flipping a few times, a maintenance wake at 21:09 ran one
+            // check with the network off, and the lid opened at 21:58.
+            var standby = new Journal(Path.Combine(Path.GetDirectoryName(path), "standby.txt"));
+            DateTime day = new DateTime(2026, 10, 19);
+            standby.Record(Results(Up("ya.ru", 168)), day.Add(new TimeSpan(20, 56, 4)));
+            foreach (string evening in new[] { "506 20:57:00", "507 20:57:01", "506 20:57:01", "507 20:57:03",
+                "506 20:57:03", "507 21:09:36", "506 21:09:36", "check 21:09:39", "507 21:58:11", "506 21:58:11",
+                "507 21:58:11", "check 21:58:25" })
+            {
+                string[] parts = evening.Split(' ');
+                DateTime time = day.Add(TimeSpan.Parse(parts[1]));
+                if (parts[0] == "506")
+                    standby.Sleeping(time);
+                else if (parts[0] == "507")
+                    standby.WokeUp(time);
+                else
+                    standby.Record(Results(time.Hour == 21 && time.Minute == 9 ? Down("ya.ru", "timeout") : Up("ya.ru", 170)), time);
+            }
+            Equal("2026-10-19 20:57:00  Windows went to sleep\n2026-10-19 21:58:11  Windows woke up after 1 h 1 min",
+                string.Join("\n", standby.Entries()), "Modern Standby: one sleep, no outage while asleep");
+
             for (int i = 0; i < Journal.MaxEntries + 20; i++)
-                journal.Sleeping(start.AddDays(1).AddMinutes(i));
+                journal.Started("1.2.0", start.AddDays(1).AddMinutes(i));
             List<string> kept = journal.Entries();
             Equal(Journal.MaxEntries, kept.Count, "the file keeps the latest entries only");
             Equal(true, kept.Last().StartsWith(start.AddDays(1).AddMinutes(Journal.MaxEntries + 19).ToString("yyyy-MM-dd HH:mm")),

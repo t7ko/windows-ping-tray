@@ -6,7 +6,6 @@ using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using Microsoft.Win32;
 
 namespace PingTray
 {
@@ -19,8 +18,10 @@ namespace PingTray
         readonly System.Windows.Forms.Timer pingTimer;
         readonly System.Windows.Forms.Timer networkChangeTimer;
         readonly System.Windows.Forms.Timer updateTimer;
+        readonly System.Windows.Forms.Timer wakeTimer;
         readonly ToolStripMenuItem updateItem;
         readonly Journal journal = new Journal(Journal.DefaultPath);
+        readonly SleepWatcher sleepWatcher;
         Settings settings;
         SettingsForm settingsForm;
         JournalForm journalForm;
@@ -83,7 +84,16 @@ namespace PingTray
                 Check(true);
             };
             NetworkChange.NetworkAddressChanged += OnNetworkAddressChanged;
-            SystemEvents.PowerModeChanged += OnPowerModeChanged;
+
+            // A wake goes into the journal once Windows has stayed awake a while (Journal.Settle);
+            // this timer makes sure that happens even if no check comes first.
+            wakeTimer = new System.Windows.Forms.Timer { Interval = (Journal.WakeSettleSeconds + 1) * 1000 };
+            wakeTimer.Tick += delegate
+            {
+                wakeTimer.Stop();
+                journal.Settle(DateTime.Now);
+            };
+            sleepWatcher = new SleepWatcher((sleeping, time) => ui.Post(delegate { OnSleepChanged(sleeping, time); }, null));
 
             // The first update check waits a minute, so that it does not slow down logging in.
             // Then the timer ticks hourly, and CheckForUpdateDaily goes to GitHub once a day.
@@ -98,16 +108,18 @@ namespace PingTray
             Check(true);
         }
 
-        void OnPowerModeChanged(object sender, PowerModeChangedEventArgs e)
+        void OnSleepChanged(bool sleeping, DateTime time)
         {
-            if (e.Mode != PowerModes.Suspend)
+            if (exiting)
                 return;
-            DateTime now = DateTime.Now;
-            ui.Post(delegate
+            if (sleeping)
+                journal.Sleeping(time);
+            else
             {
-                if (!exiting)
-                    journal.Sleeping(now);
-            }, null);
+                journal.WokeUp(time);
+                wakeTimer.Stop();
+                wakeTimer.Start();
+            }
         }
 
         void OnNetworkAddressChanged(object sender, EventArgs e)
@@ -354,7 +366,8 @@ namespace PingTray
         {
             exiting = true;
             NetworkChange.NetworkAddressChanged -= OnNetworkAddressChanged;
-            SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+            sleepWatcher.Dispose();
+            wakeTimer.Stop();
             pingTimer.Stop();
             networkChangeTimer.Stop();
             updateTimer.Stop();

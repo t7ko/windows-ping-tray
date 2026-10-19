@@ -5,19 +5,20 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 
 namespace PingTray.Tests
 {
     /// <summary>
     /// Checks what works without a screen: host names, the settings file, the status and tooltip,
-    /// the icons, and pings and TCP connections to this computer. scripts/build.ps1 runs it
-    /// before building the app.
+    /// the icons, pings and TCP connections to this computer, and the updater's parts that need
+    /// no GitHub. scripts/build.ps1 runs it with the path of the exe it has just built.
     /// </summary>
     static class TestMain
     {
         static int failures;
 
-        static int Main()
+        static int Main(string[] args)
         {
             HostNameTests();
             SettingsTests();
@@ -25,8 +26,94 @@ namespace PingTray.Tests
             TooltipTests();
             IconTests();
             PingerTests();
+            UpdaterTests(args[0]);
             Console.WriteLine(failures == 0 ? "All tests passed." : failures + " test(s) failed.");
             return failures == 0 ? 0 : 1;
+        }
+
+        static void UpdaterTests(string builtExe)
+        {
+            Equal(new Version(1, 2, 3, 0), Updater.ParseVersion("v1.2.3"), "a tag with v");
+            Equal(new Version(1, 2, 0, 0), Updater.ParseVersion("1.2"), "a tag with two parts");
+            Equal(null, Updater.ParseVersion("v1.2.0-beta"), "a pre-release tag is no version");
+            Equal(null, Updater.ParseVersion("latest"), "a word is no version");
+            Equal("1.2.0", Updater.Text(new Version(1, 2, 0, 0)), "versions read like tags");
+            Equal(true, Updater.ParseVersion("v99.0") > Updater.CurrentVersion, "a higher tag is newer");
+            Equal(false, Updater.ParseVersion("v" + Updater.Text(Updater.CurrentVersion)) > Updater.CurrentVersion,
+                "the same tag is not newer");
+
+            const string json = @"{""url"":""https://api.github.com/x"",""html_url"":""https://github.com/t7ko/windows-ping-tray/releases/tag/v1.2.0"",
+                ""tag_name"":""v1.2.0"",""draft"":false,""body"":""- Fixes ✓"",""author"":{""login"":""t7ko""},
+                ""assets"":[{""name"":""notes.txt"",""browser_download_url"":""https://x/notes.txt"",""size"":3,""digest"":null},
+                {""name"":""PingTray.exe"",""browser_download_url"":""https://github.com/d/PingTray.exe"",""size"":81920,""digest"":""sha256:ABCdef01""}]}";
+            Release release = Updater.Parse(json);
+            Equal(new Version(1, 2, 0, 0), release.Version, "release version");
+            Equal("https://github.com/d/PingTray.exe", release.DownloadUrl, "the exe, not the other asset");
+            Equal(81920L, release.Size, "asset size");
+            Equal("abcdef01", release.Sha256, "digest, lower case");
+            Equal("https://github.com/t7ko/windows-ping-tray/releases/tag/v1.2.0", release.PageUrl, "release page");
+            Equal(null, Updater.Parse(@"{""tag_name"":""v1.3.0"",""assets"":[]}"), "a release without the exe");
+            Equal(null, Updater.Parse(@"{""tag_name"":""nightly"",""assets"":[{""name"":""PingTray.exe"",""browser_download_url"":""u""}]}"),
+                "a release whose tag is no version");
+            Equal(null, Updater.Parse(@"{""tag_name"":""v1.3.0"",""assets"":[{""name"":""PingTray.exe"",""browser_download_url"":""u""}]}").Sha256,
+                "an asset without a digest");
+
+            var good = new Release { Version = Updater.CurrentVersion, Size = new FileInfo(builtExe).Length, Sha256 = Sha256(builtExe) };
+            Throws(null, () => Updater.Verify(builtExe, good), "the built exe passes");
+            Throws(typeof(InvalidDataException), () => Updater.Verify(builtExe,
+                new Release { Version = good.Version, Size = good.Size + 1 }), "a wrong size fails");
+            Throws(typeof(InvalidDataException), () => Updater.Verify(builtExe,
+                new Release { Version = good.Version, Sha256 = "00" }), "a wrong SHA-256 fails");
+            Throws(typeof(InvalidDataException), () => Updater.Verify(builtExe,
+                new Release { Version = new Version(9, 9, 9, 0) }), "a wrong version fails");
+            string testsExe = typeof(TestMain).Assembly.Location;
+            Throws(typeof(InvalidDataException), () => Updater.Verify(testsExe,
+                new Release { Version = good.Version }), "another program fails");
+            string html = Path.Combine(Path.GetTempPath(), "PingTray-test.html");
+            File.WriteAllText(html, "<html>Not found</html>");
+            Throws(typeof(InvalidDataException), () => Updater.Verify(html, new Release { Version = good.Version }),
+                "a web page fails");
+            File.Delete(html);
+
+            string folder = Path.Combine(Path.GetTempPath(), "PingTray-test-update");
+            Directory.CreateDirectory(folder);
+            string exe = Path.Combine(folder, "PingTray.exe");
+            File.WriteAllText(exe, "old");
+            File.WriteAllText(exe + ".new", "new");
+            Updater.Swap(exe, exe + ".new");
+            Equal("new", File.ReadAllText(exe), "swap puts the new exe in place");
+            Equal("old", File.ReadAllText(exe + ".old"), "swap keeps the old exe");
+            Updater.SwapBack(exe, exe + ".new");
+            Equal("old", File.ReadAllText(exe), "swap back restores the old exe");
+            Updater.Swap(exe, exe + ".new");
+            Equal(false, Updater.FinishUpdate(new string[0], exe), "a normal start is no update");
+            Equal(false, File.Exists(exe + ".old"), "the next start deletes the old exe");
+            Equal(true, Updater.FinishUpdate(new[] { "--updated-from", "999999" }, exe), "a start by an update");
+            Directory.Delete(folder, true);
+
+            Equal(SecurityProtocolType.SystemDefault, ServicePointManager.SecurityProtocol,
+                "HTTPS uses the TLS versions of Windows (the TargetFramework attribute works)");
+        }
+
+        static string Sha256(string path)
+        {
+            using (SHA256 sha = SHA256.Create())
+                return BitConverter.ToString(sha.ComputeHash(File.ReadAllBytes(path))).Replace("-", "").ToLowerInvariant();
+        }
+
+        /// <summary>Checks that the action throws that type of exception, or nothing when it is null.</summary>
+        static void Throws(Type expected, Action action, string what)
+        {
+            Type thrown = null;
+            try
+            {
+                action();
+            }
+            catch (Exception e)
+            {
+                thrown = e.GetType();
+            }
+            Equal(expected, thrown, what);
         }
 
         static void HostNameTests()

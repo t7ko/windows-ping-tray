@@ -5,7 +5,7 @@ using System.Windows.Forms;
 
 namespace PingTray
 {
-    /// <summary>Edits the hosts, the interval, the timeout, the check method and "Start with Windows".</summary>
+    /// <summary>Edits the hosts, the interval, the timeout, the check method, updates and "Start with Windows".</summary>
     class SettingsForm : Form
     {
         public event Action<Settings> Saved;
@@ -13,12 +13,13 @@ namespace PingTray
         readonly TextBox hostsBox;
         readonly NumericUpDown intervalBox, timeoutBox, portBox;
         readonly RadioButton tcpButton;
+        readonly ComboBox updatesBox;
         readonly CheckBox autostartBox;
         readonly bool autostartWas;
 
         public SettingsForm(Settings settings)
         {
-            Text = "Ping Tray settings";
+            Text = "Ping Tray " + Updater.Text(Updater.CurrentVersion) + " settings";
             Font = SystemFonts.MessageBoxFont;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
@@ -68,6 +69,15 @@ namespace PingTray
                 ForeColor = SystemColors.GrayText,
             };
 
+            updatesBox = new ComboBox
+            {
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Width = 12 * em,
+                Anchor = AnchorStyles.Left,
+            };
+            updatesBox.Items.AddRange(new object[] { "Install automatically", "Ask before installing", "Don't check" });  // in UpdateMode order
+            updatesBox.SelectedIndex = (int)settings.Updates;
+
             autostartWas = Autostart.IsEnabled;
             autostartBox = new CheckBox
             {
@@ -107,6 +117,10 @@ namespace PingTray
             AddWide(layout, checkBy);
             AddWide(layout, methodPanel);
             AddWide(layout, hint);
+            Label updatesLabel = Caption("Updates");
+            AddRow(layout, updatesLabel, updatesBox);
+            layout.SetColumnSpan(updatesBox, 2);
+            updatesLabel.Margin = updatesBox.Margin = new Padding(3, em / 2, 3, 3);
             AddWide(layout, autostartBox);
             AddWide(layout, buttons);
             Controls.Add(layout);
@@ -143,6 +157,7 @@ namespace PingTray
                 TimeoutMs = (int)timeoutBox.Value,
                 Method = tcpButton.Checked ? CheckMethod.Tcp : CheckMethod.Ping,
                 TcpPort = (int)portBox.Value,
+                Updates = (UpdateMode)updatesBox.SelectedIndex,
             };
             try
             {

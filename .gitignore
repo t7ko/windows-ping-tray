@@ -1,5 +1,6 @@
 dist/
 obj/
+local.properties
 .claude/settings.local.json
 AGENTS.local.md
 CLAUDE.local.md

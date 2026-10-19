@@ -1,23 +1,29 @@
 using System;
 using System.Reflection;
+using System.Runtime.Versioning;
 using System.Threading;
 using System.Windows.Forms;
 
+// The version of a release: scripts/release.ps1 tags it v1.1.0, and Updater compares it with the
+// latest tag on GitHub.
+[assembly: AssemblyVersion("1.1.0.0")]
+[assembly: AssemblyFileVersion("1.1.0.0")]
 [assembly: AssemblyTitle("Ping Tray")]
 [assembly: AssemblyDescription("Shows in the notification area whether the internet is reachable")]
 [assembly: AssemblyProduct("Ping Tray")]
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
+// Without it .NET runs the exe as if built for 4.0, whose HTTPS lacks TLS 1.2 and fails on GitHub.
+[assembly: TargetFramework(".NETFramework,Version=v4.8", FrameworkDisplayName = ".NET Framework 4.8")]
 
 namespace PingTray
 {
     static class Program
     {
         [STAThread]
-        static void Main()
+        static void Main(string[] args)
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+            bool updated = Updater.FinishUpdate(args, Application.ExecutablePath);
 
             bool firstInstance;
             using (new Mutex(true, @"Local\PingTray", out firstInstance))
@@ -37,7 +43,7 @@ namespace PingTray
                 TrayApp app;
                 try
                 {
-                    app = new TrayApp();
+                    app = new TrayApp(updated);
                 }
                 catch (Exception e)
                 {

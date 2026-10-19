@@ -14,6 +14,14 @@ namespace PingTray
         Tcp
     }
 
+    /// <summary>What to do with new releases on GitHub.</summary>
+    public enum UpdateMode
+    {
+        Auto,    // install them without asking
+        Notify,  // offer them
+        Off      // check only when asked to
+    }
+
     /// <summary>What to check and how often. Stored as key=value lines in %APPDATA%\PingTray\settings.ini.</summary>
     public class Settings
     {
@@ -26,6 +34,7 @@ namespace PingTray
         public int TimeoutMs = 2000;
         public CheckMethod Method = CheckMethod.Ping;
         public int TcpPort = 443;  // used when Method is Tcp
+        public UpdateMode Updates = UpdateMode.Auto;
 
         public static string FilePath
         {
@@ -88,6 +97,12 @@ namespace PingTray
                         if (isNumber)
                             settings.TcpPort = Clamp(number, MinPort, MaxPort);
                         break;
+                    case "updates":
+                        if (value.Equals("notify", StringComparison.OrdinalIgnoreCase))
+                            settings.Updates = UpdateMode.Notify;
+                        else if (value.Equals("off", StringComparison.OrdinalIgnoreCase))
+                            settings.Updates = UpdateMode.Off;
+                        break;
                 }
             }
             return settings;
@@ -103,6 +118,8 @@ namespace PingTray
             text.AppendLine("# method: ping, or tcp to connect to tcp_port instead (for networks that block ping)");
             text.AppendLine("method=" + (Method == CheckMethod.Tcp ? "tcp" : "ping"));
             text.AppendLine("tcp_port=" + TcpPort.ToString(CultureInfo.InvariantCulture));
+            text.AppendLine("# updates: auto (install new releases), notify (offer them) or off");
+            text.AppendLine("updates=" + Updates.ToString().ToLowerInvariant());
             foreach (string host in Hosts)
                 text.AppendLine("host=" + host);
             return text.ToString();

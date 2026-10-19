@@ -7,7 +7,7 @@ colors its icon in the notification area:
 - green: every host answers;
 - yellow: some hosts do not answer;
 - red: no host answers;
-- gray: not checked yet, or there are no hosts to ping.
+- gray: not checked yet, or there are no hosts to check.
 
 Hover over the icon to see the ping time of each host:
 
@@ -23,9 +23,15 @@ A host that fails says why: `timeout`, `DNS error`, `DNS timeout`, `unreachable`
 
 ## Installing
 
-Build `dist\PingTray.exe` (see below), copy it to a folder of its own, such as
-`%LOCALAPPDATA%\Programs\PingTray`, and run it. It needs nothing else: .NET Framework 4.8
-is part of Windows 10 and 11.
+Download `PingTray.exe` from the
+[latest release](https://github.com/t7ko/windows-ping-tray/releases/latest), put it in a
+folder of its own, such as `%LOCALAPPDATA%\Programs\PingTray`, and run it. It needs
+nothing else: .NET Framework 4.8 is part of Windows 10 and 11. Ping Tray updates itself
+in place, so the folder must be one you can write to (not `Program Files`).
+
+The exe is not signed, so the first start may show "Windows protected your PC": click
+More info, then Run anyway. (Or before starting it: right-click the file, Properties,
+tick Unblock.) Updates that Ping Tray downloads itself do not ask again.
 
 Windows 11 puts new tray icons behind the ^ arrow. To keep the icon on the taskbar, drag
 it out of there, or turn it on in Settings > Personalization > Taskbar > Other system
@@ -35,18 +41,25 @@ tray icons.
 
 - Hover over the icon: the ping time of each host.
 - Double-click it: Settings.
-- Right-click it: Check now, Settings, Exit.
+- Right-click it: Check connection now, Settings, Check for updates, Exit.
 
 Settings has the hosts to check, one per line (host names or IP addresses; a pasted URL
 such as `https://ya.ru/` is cut down to its host), how often to check them (1 to 3600
 seconds), how long to wait for each answer (100 to 10000 ms), how to check them (ping,
-or a TCP connection to a port), and Start with Windows.
+or a TCP connection to a port), what to do with updates, and Start with Windows.
 
 Each check tries every host once, all at the same time. The DNS lookup and the ping or
 connection each get up to the timeout. Ping Tray prefers a host's IPv4 address, because
 many connections have no working IPv6. It also checks 2 seconds after the network
 changes, such as when Wi-Fi drops or a VPN connects, instead of waiting for the next
 interval.
+
+A tooltip holds at most 127 characters (a Windows limit). Hosts that do not fit are
+counted in a last line, such as `+3 more`.
+
+The settings are stored in `%APPDATA%\PingTray\settings.ini`. Start with Windows adds the
+value `PingTray` under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` with the
+exe's current path; after moving the exe, turn it on again.
 
 ### Networks that block ping
 
@@ -58,12 +71,20 @@ time shown is that of the connection handshake, which is about the same as a pin
 counts as a failure, because a firewall may be the one refusing it. The tooltip's first
 line then ends with the port, such as `Online (TCP 443)`.
 
-A tooltip holds at most 127 characters (a Windows limit). Hosts that do not fit are
-counted in a last line, such as `+3 more`.
+### Updates
 
-The settings are stored in `%APPDATA%\PingTray\settings.ini`. Start with Windows adds the
-value `PingTray` under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` with the
-exe's current path; after moving the exe, turn it on again.
+A minute after it starts, and then once a day, Ping Tray asks GitHub for the latest
+release of this repository. What it does with a newer one depends on Settings > Updates:
+
+- Install automatically (the default): it downloads the new `PingTray.exe`, checks it,
+  puts it in place of the running one and restarts. A notification says so.
+- Ask before installing: a notification offers the new version; click it, or the
+  Install version item in the menu.
+- Don't check: it asks GitHub only when you click Check for updates.
+
+Before installing, Ping Tray checks that the download has the size and SHA-256 that
+GitHub lists for the release and that it is Ping Tray of the announced version. If
+anything fails, the running version stays and a notification says why.
 
 ## Building
 
@@ -71,6 +92,15 @@ exe's current path; after moving the exe, turn it on again.
 powershell -ExecutionPolicy Bypass -File scripts\build.ps1
 ```
 
-This runs the tests in `tests\Tests.cs`, then writes `dist\PingTray.exe`. It uses the C#
-compiler that comes with .NET Framework 4.8, so nothing has to be installed. Exit Ping
-Tray before building, or the exe cannot be replaced.
+This builds the exe, runs the tests in `tests\Tests.cs` and then writes
+`dist\PingTray.exe`. It uses the C# compiler that comes with .NET Framework 4.8, so
+nothing has to be installed. Exit Ping Tray before building, or the exe cannot be
+replaced.
+
+## Releasing
+
+Raise `AssemblyVersion` and `AssemblyFileVersion` in `src/Program.cs`, commit, and run
+`scripts\release.ps1`. It builds, tags `v<version>`, pushes `main` and the tag, creates
+the GitHub release and attaches `PingTray.exe`. It needs a fine-grained GitHub token
+with Contents read and write on this repository, in a file that `github.tokenFile` in the
+git-ignored `local.properties` names.

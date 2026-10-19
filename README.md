@@ -42,9 +42,13 @@ tray icons.
 
 ## Using it
 
-- Hover over the icon: the ping time of each host.
+- Hover over the icon: the ping time of each host. When the icon is not green, the
+  failing hosts are pinged every second while the pointer stays there, and the tooltip,
+  marked `(live)`, shows each answer at once; the icon turns green as soon as they answer.
+  This stops when the pointer moves away (or after 10 minutes); a normal check follows.
 - Click it: check all hosts now. The icon is gray until the answers are in, usually a
-  blink; when hosts do not answer, up to the timeout.
+  blink; when a host does not answer, until its tries are over (about 11 seconds with the
+  default timeout).
 - Double-click it: Settings.
 - Right-click it: Check connection now, Settings, Journal, Check for updates, Home page
   (this page), Report a problem, Exit.
@@ -57,8 +61,10 @@ Start with Windows.
 
 ![The Settings window](docs/settings.png)
 
-Each check tries every host once, all at the same time. The DNS lookup and the ping or
-connection each get up to the timeout. Ping Tray prefers a host's IPv4 address, because
+Each check tries all hosts at the same time. A host that does not answer gets up to 3
+more tries, a second after each failure; the first answer counts, so a single lost
+packet does not make a host fail. The DNS lookup and the ping or connection each get up
+to the timeout. Ping Tray prefers a host's IPv4 address, because
 many connections have no working IPv6. It also checks 2 seconds after the network
 changes, such as when Wi-Fi drops or a VPN connects, instead of waiting for the next
 interval.
@@ -76,7 +82,7 @@ exe's current path; after moving the exe, turn it on again.
 Right-click the icon and choose Journal to see when the connection changed, newest first:
 
 ```text
-2026-10-19 09:02:11  Ping Tray 1.2.1 started
+2026-10-19 09:02:11  Ping Tray 1.3.0 started
 2026-10-19 20:41:03  Not answering: 1.1.1.1 (timeout)
 2026-10-19 20:41:33  Offline: no host answers
 2026-10-19 20:43:15  Online again after 2 min 12 s

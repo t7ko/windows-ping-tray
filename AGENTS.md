@@ -22,6 +22,7 @@ in `../AGENTS.md`, outside this repository, as are machine details: the git-igno
 - `src/Updater.cs`: GitHub's latest-release API, download, checks, and swapping the exe.
 - `src/Journal.cs`: the journal of state changes and its file; `src/JournalForm.cs` shows it.
 - `src/SleepWatcher.cs`: when Windows sleeps and wakes, including Modern Standby.
+- `src/HoverTracker.cs`: whether the pointer is over the icon, for live pinging.
 - `src/Links.cs`: the home page, and Report a problem: a `mailto:` to the user's personal
   address with the version, settings and tooltip filled in.
 - `src/StatusIcons.cs`: draws the icons as .ico data. `scripts/build.ps1` loads this file
@@ -61,8 +62,15 @@ in `../AGENTS.md`, outside this repository, as are machine details: the git-igno
   events can arrive late. `PowerModeChanged` still covers classic sleep and hibernation.
   Standby flips in and out several times on closing the lid and for maintenance wakes, so
   a wake counts only after `Journal.WakeSettleSeconds` (10) without a new 506.
-- One ping (or TCP connection) per host per check. A single lost packet shows yellow
-  until the next check.
+- Up to `Pinger.Tries` (4) pings or TCP connections per host per check, `RetryDelayMs`
+  (1 s) after each failure; the first success counts. A dead host makes a check last
+  about 4 × timeout + 3 s (11 s by default), and the gray after a click as long.
+- Live pinging: while the pointer is over a non-green icon (`HoverTracker`: NotifyIcon has
+  no mouse-leave, so "moved without a mouse move for 400 ms" means gone), each host that
+  failed is pinged once a second, ping.exe style, with single tries (`CheckOnceAsync`).
+  The results merge into what is shown (`TrayApp.shown`): tooltip marked "live", icon
+  color, but not the journal, which would flap. Leaving, or 10 minutes, ends it, and a
+  normal check settles the state.
 - The TCP method is one setting for all hosts, not a `host:port` per line; `HostNames`
   still drops a pasted port. The time is that of `TcpClient.ConnectAsync`, which comes
   within a few milliseconds of the ping time. A refused connection is a failure.
@@ -111,6 +119,10 @@ in `../AGENTS.md`, outside this repository, as are machine details: the git-igno
   can be read: `Get-WinEvent -FilterHashtable @{LogName='System';
   ProviderName='Microsoft-Windows-Kernel-Power'}` (506/507, also 172 for the network in
   standby). `tests/Tests.cs` replays such a night.
+- A hover without moving the user's pointer: post message `0x800` (WinForms'
+  `WM_USER + 1024` tray callback) with lParam `0x200` (`WM_MOUSEMOVE`) to the test copy's
+  top-level windows; WinForms ignores wParam. The hover then lasts until the real pointer
+  moves. A TCP listener that logs connections shows the live pings' rhythm.
 - A host that goes down and up on demand: a `TcpListener` on 127.0.0.1 and the TCP method
   with its port. Stop the listener, wait two checks, start it on the same port again.
 - While the user's copy runs, a test copy needs its own single-instance mutex name and

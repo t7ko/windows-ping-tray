@@ -19,6 +19,8 @@ namespace PingTray
         readonly System.Windows.Forms.Timer networkChangeTimer;
         readonly System.Windows.Forms.Timer updateTimer;
         readonly System.Windows.Forms.Timer wakeTimer;
+        readonly System.Windows.Forms.Timer hoverTimer;
+        readonly HoverTracker hover = new HoverTracker();
         readonly ToolStripMenuItem updateItem;
         readonly Journal journal = new Journal(Journal.DefaultPath);
         readonly SleepWatcher sleepWatcher;
@@ -27,6 +29,13 @@ namespace PingTray
         JournalForm journalForm;
         bool checking, checkAgain, exiting;
         int userChecks;  // checks the user asked for; the icon is gray until one started after the last ends
+        bool grayed;     // gray for such a check right now
+        HostResult[] shown;  // on display: the last check's results, with live pings merged in
+        const int LiveIntervalMs = 1000;
+        static readonly TimeSpan MaxLive = TimeSpan.FromMinutes(10);
+        bool live;
+        int liveRound;   // live ping loops run while this is the round they started in
+        DateTime liveSince;  // UTC
         Release update;  // a newer release, found but not installed yet
         DateTime lastUpdateCheck = DateTime.MinValue;  // UTC
         bool checkingUpdate, installing;
@@ -61,6 +70,9 @@ namespace PingTray
             // The first click of a double-click also arrives as a click, so a double-click checks too.
             tray.MouseClick += (sender, e) => { if (e.Button == MouseButtons.Left) CheckNow(); };
             tray.MouseDoubleClick += (sender, e) => { if (e.Button == MouseButtons.Left) ShowSettings(); };
+            tray.MouseMove += delegate { OnTrayMouseMove(); };
+            hoverTimer = new System.Windows.Forms.Timer { Interval = 200 };
+            hoverTimer.Tick += delegate { OnHoverTick(); };
             tray.BalloonTipClicked += delegate
             {
                 if (update != null)
@@ -140,6 +152,7 @@ namespace PingTray
         void CheckNow()
         {
             userChecks++;
+            grayed = true;
             tray.Icon = icons[(int)Status.Unknown];
             Check(true);
         }
@@ -182,10 +195,79 @@ namespace PingTray
 
         void Show(HostResult[] results, bool color)
         {
+            shown = results;
             if (color)
+            {
                 tray.Icon = icons[(int)StatusReport.Overall(results)];
-            SetTooltip(StatusReport.Tooltip(results, settings));
+                grayed = false;
+            }
+            SetTooltip(StatusReport.Tooltip(results, settings, live));
             journal.Record(results, DateTime.Now);
+        }
+
+        void OnTrayMouseMove()
+        {
+            if (!hover.Moved(Cursor.Position, Environment.TickCount))
+                return;
+            hoverTimer.Start();
+            if (shown != null && shown.Any(r => !r.Ok))
+                StartLive();
+        }
+
+        void OnHoverTick()
+        {
+            if (hover.Poll(Cursor.Position, Environment.TickCount))
+            {
+                hoverTimer.Stop();
+                StopLive();
+            }
+            else if (live && DateTime.UtcNow - liveSince > MaxLive)
+                StopLive();  // a pointer left resting on the icon should not ping all night
+        }
+
+        /// <summary>
+        /// While the mouse is over an icon that is not green: pings each failing host every
+        /// second, like ping.exe, and shows each answer at once. These single pings are not
+        /// retried and stay out of the journal.
+        /// </summary>
+        void StartLive()
+        {
+            live = true;
+            liveSince = DateTime.UtcNow;
+            int round = ++liveRound;
+            foreach (HostResult result in shown.Where(r => !r.Ok))
+                PingLive(result.Host, round);
+            SetTooltip(StatusReport.Tooltip(shown, settings, true));
+        }
+
+        /// <summary>Ends live pinging; a normal check, with retries, then settles the state.</summary>
+        void StopLive()
+        {
+            if (!live)
+                return;
+            live = false;
+            liveRound++;
+            SetTooltip(StatusReport.Tooltip(shown, settings));
+            Check(true);
+        }
+
+        async void PingLive(string host, int round)
+        {
+            Settings used = settings;
+            while (round == liveRound && used == settings && !exiting)
+            {
+                int started = Environment.TickCount;
+                HostResult result = await Task.Run(() => Pinger.CheckOnceAsync(host, used));
+                if (round != liveRound || used != settings || exiting)
+                    return;
+                shown = shown.Select(r => r.Host == host ? result : r).ToArray();
+                if (!grayed)
+                    tray.Icon = icons[(int)StatusReport.Overall(shown)];
+                SetTooltip(StatusReport.Tooltip(shown, settings, true));
+                int wait = LiveIntervalMs - unchecked(Environment.TickCount - started);
+                if (wait > 0)
+                    await Task.Delay(wait);
+            }
         }
 
         void ShowJournal()
@@ -368,6 +450,8 @@ namespace PingTray
             NetworkChange.NetworkAddressChanged -= OnNetworkAddressChanged;
             sleepWatcher.Dispose();
             wakeTimer.Stop();
+            hoverTimer.Stop();
+            liveRound++;
             pingTimer.Stop();
             networkChangeTimer.Stop();
             updateTimer.Stop();

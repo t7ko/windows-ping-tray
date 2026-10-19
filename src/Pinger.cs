@@ -21,11 +21,30 @@ namespace PingTray
     {
         static readonly byte[] Payload = new byte[32];  // the size ping.exe sends
 
+        /// <summary>A host fails a check only after this many tries, RetryDelayMs apart.</summary>
+        public const int Tries = 4;
+        public const int RetryDelayMs = 1000;
+
+        /// <summary>
+        /// Tries the host up to Tries times, waiting RetryDelayMs after each failure; the first
+        /// success counts, so one lost packet does not make a host fail. Never throws.
+        /// </summary>
+        public static async Task<HostResult> CheckAsync(string host, Settings settings)
+        {
+            HostResult result = await CheckOnceAsync(host, settings).ConfigureAwait(false);
+            for (int attempt = 2; attempt <= Tries && !result.Ok; attempt++)
+            {
+                await Task.Delay(RetryDelayMs).ConfigureAwait(false);
+                result = await CheckOnceAsync(host, settings).ConfigureAwait(false);
+            }
+            return result;
+        }
+
         /// <summary>
         /// Resolves the host, then pings it or connects to its TCP port, as the settings say. Waits
         /// at most TimeoutMs for the DNS answer and as long again for the reply. Never throws.
         /// </summary>
-        public static async Task<HostResult> CheckAsync(string host, Settings settings)
+        public static async Task<HostResult> CheckOnceAsync(string host, Settings settings)
         {
             var result = new HostResult { Host = host };
             IPAddress address;

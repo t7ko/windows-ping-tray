@@ -29,6 +29,7 @@ namespace PingTray.Tests
             UpdaterTests(args[0]);
             LinksTests();
             JournalTests();
+            HoverTests();
             Console.WriteLine(failures == 0 ? "All tests passed." : failures + " test(s) failed.");
             return failures == 0 ? 0 : 1;
         }
@@ -344,7 +345,8 @@ namespace PingTray.Tests
             Equal(true, loopback.Ok, "127.0.0.1 answers (" + loopback.Error + ")");
             HostResult localhost = Pinger.CheckAsync("localhost", ping).Result;
             Equal(true, localhost.Ok, "localhost answers (" + localhost.Error + ")");
-            HostResult missing = Pinger.CheckAsync("no-such-host.invalid", new Settings()).Result;
+            // The failure cases try once (CheckOnceAsync): with retries each would take seconds.
+            HostResult missing = Pinger.CheckOnceAsync("no-such-host.invalid", new Settings()).Result;
             Equal(true, !missing.Ok && missing.Error.StartsWith("DNS"), "an unknown name is a DNS failure (" + missing.Error + ")");
 
             var listener = new TcpListener(IPAddress.Loopback, 0);
@@ -356,13 +358,52 @@ namespace PingTray.Tests
             listener.Stop();
             // Windows retries a refused connection and reports it after about 2 seconds.
             tcp.TimeoutMs = 5000;
-            HostResult closed = Pinger.CheckAsync("127.0.0.1", tcp).Result;
+            HostResult closed = Pinger.CheckOnceAsync("127.0.0.1", tcp).Result;
             Equal("refused", closed.Error, "a closed TCP port is refused");
             // 192.0.2.1 is a documentation address: nothing there answers.
             var silent = new Settings { Method = CheckMethod.Tcp, TcpPort = 443, TimeoutMs = 300 };
-            HostResult nobody = Pinger.CheckAsync("192.0.2.1", silent).Result;
+            HostResult nobody = Pinger.CheckOnceAsync("192.0.2.1", silent).Result;
             Equal(true, !nobody.Ok && (nobody.Error == "timeout" || nobody.Error == "unreachable"),
                 "a silent TCP host times out (" + nobody.Error + ")");
+
+            // Retries: a host that never answers is tried Tries times, RetryDelayMs apart...
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            HostResult dead = Pinger.CheckAsync("192.0.2.1", silent).Result;
+            long deadMs = watch.ElapsedMilliseconds;
+            Equal(true, !dead.Ok && deadMs >= (Pinger.Tries - 1) * Pinger.RetryDelayMs && deadMs < 10000,
+                "a dead host fails after " + Pinger.Tries + " tries (" + deadMs + " ms)");
+            // ...and one that comes up between tries counts as up.
+            tcp.TimeoutMs = 500;
+            watch.Restart();
+            var late = new TcpListener(IPAddress.Loopback, port);
+            System.Threading.Tasks.Task.Delay(1200).ContinueWith(t => late.Start());
+            HostResult revived = Pinger.CheckAsync("127.0.0.1", tcp).Result;
+            long revivedMs = watch.ElapsedMilliseconds;
+            late.Stop();
+            Equal(true, revived.Ok && revivedMs >= Pinger.RetryDelayMs,
+                "a host that answers a later try is up (" + revived.Error + ", " + revivedMs + " ms)");
+        }
+
+        static void HoverTests()
+        {
+            var hover = new HoverTracker();
+            var at = new System.Drawing.Point(100, 200);
+            var away = new System.Drawing.Point(300, 200);
+            Equal(true, hover.Moved(at, 1000), "the first mouse move starts a hover");
+            Equal(false, hover.Moved(at, 1100), "more mouse moves do not start another");
+            Equal(false, hover.Poll(at, 9000), "a pointer resting on the icon stays");
+            Equal(false, hover.Poll(away, 1100 + HoverTracker.LeaveMs - 1), "a move without a mouse move yet: maybe still on it");
+            Equal(true, hover.Poll(away, 1100 + HoverTracker.LeaveMs), "moved and no mouse move for a while: gone");
+            Equal(false, hover.Hovering, "not hovering any more");
+            Equal(false, hover.Poll(away, 20000), "polls after the end change nothing");
+            Equal(true, hover.Moved(at, 30000), "coming back starts a new hover");
+
+            var settings = new Settings();
+            Equal("1 of 2 hosts answer (live)\n× b: timeout\na: 5 ms",
+                StatusReport.Tooltip(Results(Up("a", 5), Down("b", "timeout")), settings, true), "live tooltip");
+            Equal("Offline: no host answers (TCP 443, live)\n× b: timeout",
+                StatusReport.Tooltip(Results(Down("b", "timeout")), new Settings { Method = CheckMethod.Tcp }, true),
+                "live tooltip with TCP");
         }
 
         static HostResult Up(string host, long ms)

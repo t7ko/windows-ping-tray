@@ -22,9 +22,10 @@ namespace PingTray
         /// A summary line, then one line per host: first the hosts that fail, marked with ×, in
         /// the order of the settings; then the others from the slowest to the fastest. Lines that
         /// do not fit into a tooltip are replaced by "+N more", so the fastest hosts go first and
-        /// failing ones stay. The summary names the TCP port when that is used.
+        /// failing ones stay. The summary names the TCP port when that is used, and says "live"
+        /// while the mouse is over the icon and failing hosts are pinged every second.
         /// </summary>
-        public static string Tooltip(IList<HostResult> results, Settings settings)
+        public static string Tooltip(IList<HostResult> results, Settings settings, bool live = false)
         {
             if (results.Count == 0)
                 return "Ping Tray: no hosts to check.\nDouble-click to add some.";
@@ -32,8 +33,13 @@ namespace PingTray
             string header = up == results.Count ? "Online"
                 : up == 0 ? "Offline: no host answers"
                 : up + " of " + results.Count + " hosts answer";
+            var tags = new List<string>();
             if (settings.Method == CheckMethod.Tcp)
-                header += " (TCP " + settings.TcpPort + ")";
+                tags.Add("TCP " + settings.TcpPort);
+            if (live)
+                tags.Add("live");
+            if (tags.Count > 0)
+                header += " (" + string.Join(", ", tags) + ")";
             // OrderByDescending is stable: hosts with the same time keep the order of the settings.
             List<string> lines = results.Where(r => !r.Ok)
                 .Concat(results.Where(r => r.Ok).OrderByDescending(r => r.RoundtripMs))

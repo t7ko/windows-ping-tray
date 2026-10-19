@@ -56,18 +56,7 @@ if ($builtVersion -ne "$version.0") { throw "dist\$assetName is version $builtVe
 
 $token = (Get-Content (Get-LocalProperty 'github.tokenFile') -TotalCount 1).Trim()
 
-# The token reaches git as an HTTP header through GIT_CONFIG_* variables, so it never
-# appears on a command line. (An askpass shell script fails: git started from Windows
-# PowerShell finds no sh to run it.)
-$env:GIT_CONFIG_COUNT = '1'
-$env:GIT_CONFIG_KEY_0 = 'http.https://github.com/.extraHeader'
-$env:GIT_CONFIG_VALUE_0 = 'Authorization: Basic ' +
-    [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("x-access-token:$token"))
-try {
-    Invoke-Git -c credential.helper= push origin main $tag
-} finally {
-    Remove-Item Env:GIT_CONFIG_COUNT, Env:GIT_CONFIG_KEY_0, Env:GIT_CONFIG_VALUE_0
-}
+& (Join-Path $PSScriptRoot 'push.ps1') main $tag
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $headers = @{

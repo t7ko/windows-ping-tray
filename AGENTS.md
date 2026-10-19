@@ -26,6 +26,7 @@ in `../AGENTS.md`, outside this repository, as are machine details: the git-igno
   the exe into `obj/`, runs the tests with its path (they check it as an update would),
   then copies it to `dist/`.
 - `scripts/release.ps1`: tags, pushes and publishes a release (see below).
+- `scripts/push.ps1`: pushes `main` (or the refs given) to GitHub with the token.
 - `scripts/fake-release-server.js`: a stand-in for GitHub's release API, for trying
   updates.
 
@@ -71,9 +72,10 @@ in `../AGENTS.md`, outside this repository, as are machine details: the git-igno
   Failed automatic checks are silent; a failed automatic install shows a balloon.
   `updates=auto` is the default.
 - To publish: raise `AssemblyVersion` and `AssemblyFileVersion` in `src/Program.cs`,
-  commit, run `scripts/release.ps1`. It needs the token named in `local.properties`
-  (`github.tokenFile`) and hands it to git as an HTTP header through `GIT_CONFIG_*`
-  environment variables. Never print a token, or put one on a command line.
+  commit, run `scripts/release.ps1`. To push without a release: `scripts/push.ps1`.
+  Both need the token named in `local.properties` (`github.tokenFile`); `push.ps1`
+  hands it to git as an HTTP header through `GIT_CONFIG_*` environment variables.
+  Never print a token, or put one on a command line.
 
 ## Trying it
 
@@ -82,6 +84,10 @@ in `../AGENTS.md`, outside this repository, as are machine details: the git-igno
   app, and read the tooltip as `../AGENTS.md` describes. Delete the file afterwards if the
   user had none.
 - `CenterScreen` puts the settings window on the monitor with the mouse pointer.
+- `docs/settings.png` (in the README) is the window drawing itself: a throwaway exe
+  compiled with `src/` (and `/win32icon` for the title bar icon) opens `SettingsForm`, calls
+  `PrintWindow` with `PW_RENDERFULLCONTENT` and crops to `DWMWA_EXTENDED_FRAME_BOUNDS`, so
+  nothing behind the window shows. Retake it when the window changes.
 - Updates without publishing: compile a copy of `src/` with a higher `AssemblyVersion`
   into a folder, with `latest.json` beside it (`tag_name`, and one asset `PingTray.exe`
   with `browser_download_url` `http://127.0.0.1:<port>/PingTray.exe`, `size` and

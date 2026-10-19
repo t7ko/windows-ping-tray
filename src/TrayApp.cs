@@ -280,8 +280,8 @@ namespace PingTray
             {
                 installing = false;
                 string reason = e is UnauthorizedAccessException
-                    ? "Windows does not let it replace " + exe + ". Move PingTray.exe to a folder of " +
-                        "your own, such as %LOCALAPPDATA%\\Programs\\PingTray."
+                    ? "Windows does not let it replace " + exe + ". Move PingTray.exe to a folder " +
+                        "you can write to, such as %LOCALAPPDATA%\\Programs."
                     : e.Message;
                 if (userAsked)
                     MessageBox.Show("Could not update Ping Tray:\n" + reason, "Ping Tray",

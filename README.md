@@ -24,10 +24,12 @@ A host that fails says why: `timeout`, `DNS error`, `DNS timeout`, `unreachable`
 ## Installing
 
 Download `PingTray.exe` from the
-[latest release](https://github.com/t7ko/windows-ping-tray/releases/latest), put it in a
-folder of its own, such as `%LOCALAPPDATA%\Programs\PingTray`, and run it. It needs
-nothing else: .NET Framework 4.8 is part of Windows 10 and 11. Ping Tray updates itself
-in place, so the folder must be one you can write to (not `Program Files`).
+[latest release](https://github.com/t7ko/windows-ping-tray/releases/latest), put it in
+any folder you can write to, and run it. It is a single file and needs nothing else:
+.NET Framework 4.8 is part of Windows 10 and 11, and the settings live in `%APPDATA%`.
+The folder must be writable (so not `Program Files`) because Ping Tray updates itself in
+place; during an update, `PingTray.exe.new` and `PingTray.exe.old` appear next to it for
+a moment.
 
 The exe is not signed, so the first start may show "Windows protected your PC": click
 More info, then Run anyway. (Or before starting it: right-click the file, Properties,
@@ -47,6 +49,8 @@ Settings has the hosts to check, one per line (host names or IP addresses; a pas
 such as `https://ya.ru/` is cut down to its host), how often to check them (1 to 3600
 seconds), how long to wait for each answer (100 to 10000 ms), how to check them (ping,
 or a TCP connection to a port), what to do with updates, and Start with Windows.
+
+![The Settings window](docs/settings.png)
 
 Each check tries every host once, all at the same time. The DNS lookup and the ping or
 connection each get up to the timeout. Ping Tray prefers a host's IPv4 address, because
@@ -103,4 +107,5 @@ Raise `AssemblyVersion` and `AssemblyFileVersion` in `src/Program.cs`, commit, a
 `scripts\release.ps1`. It builds, tags `v<version>`, pushes `main` and the tag, creates
 the GitHub release and attaches `PingTray.exe`. It needs a fine-grained GitHub token
 with Contents read and write on this repository, in a file that `github.tokenFile` in the
-git-ignored `local.properties` names.
+git-ignored `local.properties` names. `scripts\push.ps1` pushes `main` with the same
+token, without a release.

@@ -22,6 +22,7 @@ namespace PingTray
         Settings settings;
         SettingsForm settingsForm;
         bool checking, checkAgain, exiting;
+        int userChecks;  // checks the user asked for; the icon is gray until one started after the last ends
         Release update;  // a newer release, found but not installed yet
         DateTime lastUpdateCheck = DateTime.MinValue;  // UTC
         bool checkingUpdate, installing;
@@ -40,7 +41,7 @@ namespace PingTray
             settingsItem.Font = new Font(settingsItem.Font, FontStyle.Bold);  // what a double-click does
             updateItem = new ToolStripMenuItem("Check for updates", null, delegate { OnUpdateItem(); });
             var menu = new ContextMenuStrip();
-            menu.Items.Add("Check connection now", null, delegate { Check(true); });
+            menu.Items.Add("Check connection now", null, delegate { CheckNow(); });
             menu.Items.Add(settingsItem);
             menu.Items.Add(updateItem);
             menu.Items.Add(new ToolStripSeparator());
@@ -51,6 +52,8 @@ namespace PingTray
 
             tray = new NotifyIcon { Icon = icons[(int)Status.Unknown], ContextMenuStrip = menu };
             SetTooltip("Ping Tray: checking…");
+            // The first click of a double-click also arrives as a click, so a double-click checks too.
+            tray.MouseClick += (sender, e) => { if (e.Button == MouseButtons.Left) CheckNow(); };
             tray.MouseDoubleClick += (sender, e) => { if (e.Button == MouseButtons.Left) ShowSettings(); };
             tray.BalloonTipClicked += delegate
             {
@@ -101,6 +104,17 @@ namespace PingTray
         }
 
         /// <summary>
+        /// A check the user asked for (left click, or the menu). The icon turns gray until it is
+        /// done, so that the user sees it ran even when the color comes back the same.
+        /// </summary>
+        void CheckNow()
+        {
+            userChecks++;
+            tray.Icon = icons[(int)Status.Unknown];
+            Check(true);
+        }
+
+        /// <summary>
         /// Checks all hosts at once and shows the results. While a check runs, a timer tick is
         /// dropped; other requests (queue = true) run another check after it.
         /// </summary>
@@ -118,12 +132,14 @@ namespace PingTray
                 {
                     checkAgain = false;
                     Settings used = settings;
+                    int userChecksBefore = userChecks;
                     HostResult[] results = await Task.WhenAll(used.Hosts.Select(host =>
                         Task.Run(() => Pinger.CheckAsync(host, used))));
                     if (exiting)
                         return;
                     if (used == settings)
-                        Show(results);
+                        // A click during this check queued another one: the icon stays gray until then.
+                        Show(results, userChecks == userChecksBefore);
                     else
                         checkAgain = true;  // the hosts were changed meanwhile
                 } while (checkAgain);
@@ -134,9 +150,10 @@ namespace PingTray
             }
         }
 
-        void Show(HostResult[] results)
+        void Show(HostResult[] results, bool color)
         {
-            tray.Icon = icons[(int)StatusReport.Overall(results)];
+            if (color)
+                tray.Icon = icons[(int)StatusReport.Overall(results)];
             SetTooltip(StatusReport.Tooltip(results, settings));
         }
 

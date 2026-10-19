@@ -43,6 +43,8 @@ tray icons.
 ## Using it
 
 - Hover over the icon: the ping time of each host.
+- Click it: check all hosts now. The icon is gray until the answers are in, usually a
+  blink; when hosts do not answer, up to the timeout.
 - Double-click it: Settings.
 - Right-click it: Check connection now, Settings, Check for updates, Home page (this
   page), Report a problem, Exit.

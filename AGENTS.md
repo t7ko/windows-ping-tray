@@ -38,6 +38,9 @@ in `../AGENTS.md`, outside this repository, as are machine details: the git-igno
 - The native tooltip, not a custom pop-up window. `NotifyIcon.Text` refuses more than 63
   characters on .NET Framework; `TrayApp.SetTooltip` sets the private `text` field and
   calls `UpdateIcon` to get the 127 that Windows shows.
+- Tooltip order: failing hosts first, in the order of the settings and marked × (U+00D7,
+  which every font has, unlike ✗), then the others from the slowest to the fastest. Cutting
+  a long list to "+N more" therefore drops the fastest hosts, never a failing one.
 - One ping (or TCP connection) per host per check. A single lost packet shows yellow
   until the next check.
 - The TCP method is one setting for all hosts, not a `host:port` per line; `HostNames`

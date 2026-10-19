@@ -19,8 +19,10 @@ namespace PingTray
         }
 
         /// <summary>
-        /// A summary line, then one "host: time" line per host. Lines that do not fit into a
-        /// tooltip are replaced by "+N more". The summary names the TCP port when that is used.
+        /// A summary line, then one line per host: first the hosts that fail, marked with ×, in
+        /// the order of the settings; then the others from the slowest to the fastest. Lines that
+        /// do not fit into a tooltip are replaced by "+N more", so the fastest hosts go first and
+        /// failing ones stay. The summary names the TCP port when that is used.
         /// </summary>
         public static string Tooltip(IList<HostResult> results, Settings settings)
         {
@@ -32,7 +34,10 @@ namespace PingTray
                 : up + " of " + results.Count + " hosts answer";
             if (settings.Method == CheckMethod.Tcp)
                 header += " (TCP " + settings.TcpPort + ")";
-            List<string> lines = results.Select(Line).ToList();
+            // OrderByDescending is stable: hosts with the same time keep the order of the settings.
+            List<string> lines = results.Where(r => !r.Ok)
+                .Concat(results.Where(r => r.Ok).OrderByDescending(r => r.RoundtripMs))
+                .Select(Line).ToList();
             for (int shown = lines.Count; shown > 0; shown--)
             {
                 string text = header + string.Concat(lines.Take(shown).Select(line => "\n" + line));
@@ -44,12 +49,16 @@ namespace PingTray
             return header + "\n+" + lines.Count + " hosts";
         }
 
+        /// <summary>
+        /// The multiplication sign marks failing hosts: unlike ✗ it is in every Windows font, so
+        /// the tooltip shows it whatever font it uses.
+        /// </summary>
+        public const string FailedMark = "× ";
+
         public static string Line(HostResult result)
         {
-            string value = !result.Ok ? result.Error
-                : result.RoundtripMs < 1 ? "<1 ms"
-                : result.RoundtripMs + " ms";
-            string line = result.Host + ": " + value;
+            string line = !result.Ok ? FailedMark + result.Host + ": " + result.Error
+                : result.Host + ": " + (result.RoundtripMs < 1 ? "<1 ms" : result.RoundtripMs + " ms");
             return line.Length <= 60 ? line : line.Substring(0, 59) + "…";
         }
     }

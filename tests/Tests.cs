@@ -184,12 +184,28 @@ namespace PingTray.Tests
             var tcp = new Settings { Method = CheckMethod.Tcp, TcpPort = 443 };
             Equal("Online\nya.ru: 12 ms\n1.1.1.1: <1 ms",
                 StatusReport.Tooltip(Results(Up("ya.ru", 12), Up("1.1.1.1", 0)), ping), "all up");
-            Equal("1 of 2 hosts answer\nya.ru: 12 ms\ngoogle.com: timeout",
-                StatusReport.Tooltip(Results(Up("ya.ru", 12), Down("google.com", "timeout")), ping), "some down");
-            Equal("Offline: no host answers\nya.ru: DNS error",
+            Equal("1 of 2 hosts answer\n× google.com: timeout\nya.ru: 12 ms",
+                StatusReport.Tooltip(Results(Up("ya.ru", 12), Down("google.com", "timeout")), ping),
+                "some down: the failing host first, marked");
+            Equal("Offline: no host answers\n× ya.ru: DNS error",
                 StatusReport.Tooltip(Results(Down("ya.ru", "DNS error")), ping), "all down");
             Equal("Online (TCP 443)\nya.ru: 12 ms",
                 StatusReport.Tooltip(Results(Up("ya.ru", 12)), tcp), "TCP names the port");
+            Equal("3 of 5 hosts answer\n× c: timeout\n× e: DNS error\nb: 40 ms\na: 12 ms\nd: <1 ms",
+                StatusReport.Tooltip(Results(Up("a", 12), Up("b", 40), Down("c", "timeout"), Up("d", 0),
+                    Down("e", "DNS error")), ping),
+                "failing hosts in settings order, then the others from slowest to fastest");
+            Equal("Online\nx: 10 ms\ny: 10 ms\nz: 10 ms",
+                StatusReport.Tooltip(Results(Up("x", 10), Up("y", 10), Up("z", 10)), ping),
+                "equal times keep the settings order");
+
+            List<HostResult> crowd = Enumerable.Range(1, 12).Select(i => Up("fast" + i + ".example.com", i)).ToList();
+            crowd.Add(Down("down1.example.com", "timeout"));
+            crowd.Add(Down("down2.example.com", "unreachable"));
+            string crowded = StatusReport.Tooltip(crowd, ping);
+            Equal(true, crowded.Contains("× down1.example.com") && crowded.Contains("× down2.example.com"),
+                "a long list still shows every failing host");
+            Equal(false, crowded.Contains("fast1.example.com:"), "a long list leaves out the fastest hosts");
 
             List<HostResult> many = Enumerable.Range(1, 20).Select(i => Up("host" + i + ".example.com", 100)).ToList();
             string tip = StatusReport.Tooltip(many, tcp);

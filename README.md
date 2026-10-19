@@ -13,13 +13,14 @@ Hover over the icon to see the ping time of each host:
 
 ```text
 2 of 3 hosts answer
+× 192.0.2.1: timeout
 ya.ru: 175 ms
 google.com: 123 ms
-192.0.2.1: timeout
 ```
 
-A host that fails says why: `timeout`, `DNS error`, `DNS timeout`, `unreachable`,
-`refused` (TCP only), `TTL expired` or `failed`.
+Hosts that fail come first, marked ×, and say why: `timeout`, `DNS error`,
+`DNS timeout`, `unreachable`, `refused` (TCP only), `TTL expired` or `failed`. The
+others follow from the slowest to the fastest, so the best are at the bottom.
 
 ## Installing
 
@@ -59,7 +60,8 @@ changes, such as when Wi-Fi drops or a VPN connects, instead of waiting for the 
 interval.
 
 A tooltip holds at most 127 characters (a Windows limit). Hosts that do not fit are
-counted in a last line, such as `+3 more`.
+counted in a last line, such as `+3 more`. Those are the fastest ones; failing hosts are
+always listed.
 
 The settings are stored in `%APPDATA%\PingTray\settings.ini`. Start with Windows adds the
 value `PingTray` under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` with the

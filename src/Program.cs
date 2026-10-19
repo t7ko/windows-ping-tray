@@ -6,8 +6,8 @@ using System.Windows.Forms;
 
 // The version of a release: scripts/release.ps1 tags 1.2.3.0 as v1.2.3, and Updater compares it
 // with the latest tag on GitHub.
-[assembly: AssemblyVersion("1.1.2.0")]
-[assembly: AssemblyFileVersion("1.1.2.0")]
+[assembly: AssemblyVersion("1.2.0.0")]
+[assembly: AssemblyFileVersion("1.2.0.0")]
 [assembly: AssemblyTitle("Ping Tray")]
 [assembly: AssemblyDescription("Shows in the notification area whether the internet is reachable")]
 [assembly: AssemblyProduct("Ping Tray")]

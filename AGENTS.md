@@ -20,6 +20,7 @@ in `../AGENTS.md`, outside this repository, as are machine details: the git-igno
 - `src/SettingsForm.cs`: the settings window, built in code (there is no designer).
 - `src/Autostart.cs`: the `HKCU\...\Run` value behind Start with Windows.
 - `src/Updater.cs`: GitHub's latest-release API, download, checks, and swapping the exe.
+- `src/Journal.cs`: the journal of state changes and its file; `src/JournalForm.cs` shows it.
 - `src/Links.cs`: the home page, and Report a problem: a `mailto:` to the user's personal
   address with the version, settings and tooltip filled in.
 - `src/StatusIcons.cs`: draws the icons as .ico data. `scripts/build.ps1` loads this file
@@ -47,6 +48,10 @@ in `../AGENTS.md`, outside this repository, as are machine details: the git-igno
   check that started after the last click ends (`TrayApp.userChecks`), so a check already
   running cannot bring the color back early. A double-click checks as well, because its
   first click arrives as a click.
+- The journal follows the set of failing hosts, not each host: an entry when it changes,
+  "Online again after <time>" when it empties, timed from when it stopped being empty.
+  Start and sleep (`SystemEvents.PowerModeChanged`) reset it, so no downtime spans them.
+  Each entry rewrites `journal.txt` (500 lines at most), which is small enough.
 - One ping (or TCP connection) per host per check. A single lost packet shows yellow
   until the next check.
 - The TCP method is one setting for all hosts, not a `host:port` per line; `HostNames`
@@ -93,6 +98,11 @@ in `../AGENTS.md`, outside this repository, as are machine details: the git-igno
   app, and read the tooltip as `../AGENTS.md` describes. Delete the file afterwards if the
   user had none.
 - `CenterScreen` puts the settings window on the monitor with the mouse pointer.
+- A host that goes down and up on demand: a `TcpListener` on 127.0.0.1 and the TCP method
+  with its port. Stop the listener, wait two checks, start it on the same port again.
+- While the user's copy runs, a test copy needs its own single-instance mutex name and
+  `Settings.FilePath` (the journal lives beside the settings); patch both in a copy of
+  `src/` in a scratch folder.
 - `docs/settings.png` (in the README) is the window drawing itself: a throwaway exe
   compiled with `src/` (and `/win32icon` for the title bar icon) opens `SettingsForm`, calls
   `PrintWindow` with `PW_RENDERFULLCONTENT` and crops to `DWMWA_EXTENDED_FRAME_BOUNDS`, so

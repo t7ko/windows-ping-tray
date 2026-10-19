@@ -28,6 +28,7 @@ namespace PingTray.Tests
             PingerTests();
             UpdaterTests(args[0]);
             LinksTests();
+            JournalTests();
             Console.WriteLine(failures == 0 ? "All tests passed." : failures + " test(s) failed.");
             return failures == 0 ? 0 : 1;
         }
@@ -94,6 +95,57 @@ namespace PingTray.Tests
 
             Equal(SecurityProtocolType.SystemDefault, ServicePointManager.SecurityProtocol,
                 "HTTPS uses the TLS versions of Windows (the TargetFramework attribute works)");
+        }
+
+        static void JournalTests()
+        {
+            Equal("45 s", Journal.Duration(TimeSpan.FromSeconds(45.7)), "seconds");
+            Equal("2 min 12 s", Journal.Duration(TimeSpan.FromSeconds(132)), "minutes");
+            Equal("3 h 5 min", Journal.Duration(new TimeSpan(3, 5, 59)), "hours");
+            Equal("2 d 4 h", Journal.Duration(new TimeSpan(2, 4, 30, 0)), "days");
+            Equal("0 s", Journal.Duration(TimeSpan.FromSeconds(-3)), "a clock set back");
+
+            string path = Path.Combine(Path.GetTempPath(), "PingTray-test", "journal.txt");
+            if (Directory.Exists(Path.GetDirectoryName(path)))
+                Directory.Delete(Path.GetDirectoryName(path), true);
+            var journal = new Journal(path);
+            var heard = new List<string>();
+            journal.Added += heard.Add;
+            var start = new DateTime(2026, 10, 19, 20, 0, 0);
+            journal.Started("1.2.0", start);
+            journal.Record(Results(Up("a", 10), Up("b", 20)), start.AddSeconds(1));
+            journal.Record(Results(Up("a", 10), Down("b", "timeout")), start.AddSeconds(61));
+            journal.Record(Results(Up("a", 12), Down("b", "unreachable")), start.AddSeconds(121));
+            journal.Record(Results(Down("a", "timeout"), Down("b", "timeout")), start.AddSeconds(181));
+            journal.Record(Results(Up("a", 10), Up("b", 20)), start.AddSeconds(313));
+            journal.Record(Results(Up("a", 11), Up("b", 21)), start.AddSeconds(373));
+            journal.Sleeping(start.AddHours(1));
+            journal.Record(Results(Down("a", "timeout"), Up("b", 5)), start.AddHours(9));
+            journal.Started("1.2.0", start.AddHours(9).AddMinutes(1));
+            journal.Record(Results(Up("a", 1), Up("b", 1)), start.AddHours(9).AddMinutes(2));
+            journal.Record(Results(), start.AddHours(9).AddMinutes(3));
+            string[] expected =
+            {
+                "2026-10-19 20:00:00  Ping Tray 1.2.0 started",
+                "2026-10-19 20:01:01  Not answering: b (timeout)",
+                "2026-10-19 20:03:01  Offline: no host answers",
+                "2026-10-19 20:05:13  Online again after 4 min 12 s",
+                "2026-10-19 21:00:00  Windows went to sleep",
+                "2026-10-20 05:00:00  Not answering: a (timeout)",
+                "2026-10-20 05:01:00  Ping Tray 1.2.0 started",
+            };
+            // Same failing hosts with another reason, all up twice, and no hosts at all add nothing;
+            // the downtime runs from the first failure; sleep and a restart end it without "again".
+            Equal(string.Join("\n", expected), string.Join("\n", journal.Entries()), "journal entries");
+            Equal(expected.Length, heard.Count, "the window hears of every entry");
+
+            for (int i = 0; i < Journal.MaxEntries + 20; i++)
+                journal.Sleeping(start.AddDays(1).AddMinutes(i));
+            List<string> kept = journal.Entries();
+            Equal(Journal.MaxEntries, kept.Count, "the file keeps the latest entries only");
+            Equal(true, kept.Last().StartsWith(start.AddDays(1).AddMinutes(Journal.MaxEntries + 19).ToString("yyyy-MM-dd HH:mm")),
+                "the latest entry is kept");
+            Directory.Delete(Path.GetDirectoryName(path), true);
         }
 
         static void LinksTests()

@@ -46,8 +46,8 @@ tray icons.
 - Click it: check all hosts now. The icon is gray until the answers are in, usually a
   blink; when hosts do not answer, up to the timeout.
 - Double-click it: Settings.
-- Right-click it: Check connection now, Settings, Check for updates, Home page (this
-  page), Report a problem, Exit.
+- Right-click it: Check connection now, Settings, Journal, Check for updates, Home page
+  (this page), Report a problem, Exit.
 
 Settings has the hosts to check, one per line (host names or IP addresses; a pasted URL
 such as `https://ya.ru/` is cut down to its host), how often to check them (1 to 3600
@@ -70,6 +70,23 @@ always listed.
 The settings are stored in `%APPDATA%\PingTray\settings.ini`. Start with Windows adds the
 value `PingTray` under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` with the
 exe's current path; after moving the exe, turn it on again.
+
+### Journal
+
+Right-click the icon and choose Journal to see when the connection changed, newest first:
+
+```text
+2026-10-19 20:43:15  Online again after 2 min 12 s
+2026-10-19 20:41:33  Offline: no host answers
+2026-10-19 20:41:03  Not answering: 1.1.1.1 (timeout)
+2026-10-19 09:02:11  Ping Tray 1.2.0 started
+```
+
+An entry is written when hosts stop answering, when the set of failing hosts changes, and
+when all answer again, with how long that took since the first one failed. Ping Tray's
+start and Windows going to sleep are noted too; both end a downtime, so a night asleep
+does not count as one. The latest 500 entries are kept in
+`%APPDATA%\PingTray\journal.txt`; Open file in the Journal window opens it.
 
 ### Networks that block ping
 

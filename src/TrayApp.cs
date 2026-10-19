@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using Microsoft.Win32;
 
 namespace PingTray
 {
@@ -19,8 +20,10 @@ namespace PingTray
         readonly System.Windows.Forms.Timer networkChangeTimer;
         readonly System.Windows.Forms.Timer updateTimer;
         readonly ToolStripMenuItem updateItem;
+        readonly Journal journal = new Journal(Journal.DefaultPath);
         Settings settings;
         SettingsForm settingsForm;
+        JournalForm journalForm;
         bool checking, checkAgain, exiting;
         int userChecks;  // checks the user asked for; the icon is gray until one started after the last ends
         Release update;  // a newer release, found but not installed yet
@@ -33,6 +36,7 @@ namespace PingTray
         {
             ui = SynchronizationContext.Current;
             settings = Settings.Load();
+            journal.Started(Updater.Text(Updater.CurrentVersion), DateTime.Now);
             int size = SystemInformation.SmallIconSize.Width;
             icons = Enum.GetValues(typeof(Status)).Cast<Status>()
                 .Select(status => StatusIcons.CreateIcon(status, size)).ToArray();
@@ -43,6 +47,7 @@ namespace PingTray
             var menu = new ContextMenuStrip();
             menu.Items.Add("Check connection now", null, delegate { CheckNow(); });
             menu.Items.Add(settingsItem);
+            menu.Items.Add("Journal…", null, delegate { ShowJournal(); });
             menu.Items.Add(updateItem);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Home page", null, delegate { Links.OpenHomePage(); });
@@ -78,6 +83,7 @@ namespace PingTray
                 Check(true);
             };
             NetworkChange.NetworkAddressChanged += OnNetworkAddressChanged;
+            SystemEvents.PowerModeChanged += OnPowerModeChanged;
 
             // The first update check waits a minute, so that it does not slow down logging in.
             // Then the timer ticks hourly, and CheckForUpdateDaily goes to GitHub once a day.
@@ -90,6 +96,18 @@ namespace PingTray
             updateTimer.Start();
 
             Check(true);
+        }
+
+        void OnPowerModeChanged(object sender, PowerModeChangedEventArgs e)
+        {
+            if (e.Mode != PowerModes.Suspend)
+                return;
+            DateTime now = DateTime.Now;
+            ui.Post(delegate
+            {
+                if (!exiting)
+                    journal.Sleeping(now);
+            }, null);
         }
 
         void OnNetworkAddressChanged(object sender, EventArgs e)
@@ -155,6 +173,18 @@ namespace PingTray
             if (color)
                 tray.Icon = icons[(int)StatusReport.Overall(results)];
             SetTooltip(StatusReport.Tooltip(results, settings));
+            journal.Record(results, DateTime.Now);
+        }
+
+        void ShowJournal()
+        {
+            if (journalForm == null)
+            {
+                journalForm = new JournalForm(journal);
+                journalForm.FormClosed += delegate { journalForm = null; };
+                journalForm.Show();
+            }
+            journalForm.Activate();
         }
 
         /// <summary>
@@ -324,11 +354,14 @@ namespace PingTray
         {
             exiting = true;
             NetworkChange.NetworkAddressChanged -= OnNetworkAddressChanged;
+            SystemEvents.PowerModeChanged -= OnPowerModeChanged;
             pingTimer.Stop();
             networkChangeTimer.Stop();
             updateTimer.Stop();
             if (settingsForm != null)
                 settingsForm.Close();
+            if (journalForm != null)
+                journalForm.Close();
             tray.Visible = false;  // otherwise the icon stays until the mouse passes over it
             tray.Dispose();
             base.ExitThreadCore();
